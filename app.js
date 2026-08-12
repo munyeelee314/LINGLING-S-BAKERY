@@ -238,6 +238,7 @@ function readFileAsDataURL(file){
 }
 
 async function persistBusinessProfile(){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const {error} = await sb.from('business_profile').upsert(businessProfileToRow(businessProfile));
   if(error){ console.error(error); showToast('保存商家资料失败：'+error.message); return; }
   renderBusinessQrPreview();
@@ -270,6 +271,7 @@ function toggleNewActivityForm(show){
 }
 
 async function createActivity(){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const name = document.getElementById('act-name').value.trim();
   if(!name){ showToast('请输入活动名称'); return; }
   const icon = document.getElementById('act-icon').value;
@@ -374,6 +376,7 @@ function calcPurchaseTotal(){
 }
 
 async function addPurchase(){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const item = document.getElementById('p-item').value.trim();
   if(!item){ showToast('请输入原料名称'); return; }
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
@@ -398,6 +401,7 @@ async function addPurchase(){
 }
 
 async function deletePurchase(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const {error} = await sb.from('purchases').delete().eq('id', id);
   if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
   purchases = purchases.filter(p=>p.id!==id);
@@ -439,6 +443,7 @@ function renderPurchaseList(){
 
 // ---------- Products ----------
 async function addProduct(){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const name = document.getElementById('prod-name').value.trim();
   if(!name){ showToast('请输入货品名称'); return; }
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
@@ -508,6 +513,7 @@ function cancelEditProduct(){
 }
 
 async function deleteProduct(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const {error} = await sb.from('products').delete().eq('id', id);
   if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
   products = products.filter(p=>p.id!==id);
@@ -701,6 +707,7 @@ function getOrderItems(o){
 
 // ---------- Order ----------
 async function addOrder(){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const name = document.getElementById('o-name').value.trim();
   if(!name){ showToast('请填写客户姓名'); return; }
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
@@ -922,6 +929,7 @@ function orderCardHTML(o, showActions){
 }
 
 async function updatePaidAmount(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const o = orders.find(x=>x.id===id);
   if(!o) return;
   const input = document.getElementById('pay-input-'+id);
@@ -936,6 +944,7 @@ async function updatePaidAmount(id){
 }
 
 async function markFullyPaid(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const o = orders.find(x=>x.id===id);
   if(!o) return;
   const {error} = await sb.from('orders').update({paid_amount:o.totalPrice, payment_status:'paid'}).eq('id', id);
@@ -947,6 +956,7 @@ async function markFullyPaid(id){
 }
 
 async function deleteOrder(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const {error} = await sb.from('orders').delete().eq('id', id);
   if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
   orders = orders.filter(o=>o.id!==id);
