@@ -39,6 +39,7 @@ create table if not exists purchases (
   shop_name text,
   product_link text,
   product_photo text,
+  product_pdf text,
   created_at timestamptz default now()
 );
 
@@ -64,6 +65,7 @@ alter table purchases add column if not exists product_photo text;
 alter table purchases add column if not exists currency text default 'MYR';
 alter table purchases add column if not exists rmb_unit_price numeric default 0;
 alter table purchases add column if not exists rmb_total numeric default 0;
+alter table purchases add column if not exists product_pdf text;
 
 create table if not exists orders (
   id text primary key,

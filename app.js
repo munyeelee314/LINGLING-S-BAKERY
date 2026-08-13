@@ -6,6 +6,7 @@ let products = [];
 let businessProfile = {};
 let editingOrderId = null;
 let editingProductId = null;
+let editingPurchaseId = null;
 let selectedActivityId = 'all'; // shared selection concept across tabs, 'all' or activity id or 'none'
 let selectedPurchaseIds = new Set(); // for grouping multiple purchase lines into one repayment settlement
 
@@ -85,7 +86,8 @@ function purchaseToRow(p){
     repaid: !!p.repaid,
     shop_name: p.shopName || '',
     product_link: p.productLink || '',
-    product_photo: p.productPhoto || ''
+    product_photo: p.productPhoto || '',
+    product_pdf: p.productPdf || ''
   };
 }
 function rowToPurchase(r){
@@ -107,7 +109,8 @@ function rowToPurchase(r){
     repaid: !!r.repaid,
     shopName: r.shop_name || '',
     productLink: r.product_link || '',
-    productPhoto: r.product_photo || ''
+    productPhoto: r.product_photo || '',
+    productPdf: r.product_pdf || ''
   };
 }
 
@@ -434,16 +437,32 @@ function toggleRepaidField(){
   document.getElementById('p-repaid-wrapper').style.display = isAdvance ? 'block' : 'none';
 }
 
+function resetPurchaseFormUI(){
+  document.getElementById('purchase-save-btn').textContent = '保存采购记录';
+  document.getElementById('purchase-cancel-edit-btn').style.display = 'none';
+}
+
+function resetPurchaseFormFields(){
+  ['p-item','p-qty','p-unit','p-price','p-total','p-price-rmb','p-total-rmb','p-supplier','p-note','p-buyer','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('p-product-photo-file').value = '';
+  document.getElementById('p-product-pdf-file').value = '';
+  document.getElementById('p-is-advance').checked = false;
+  document.getElementById('p-repaid').checked = false;
+  toggleRepaidField();
+}
+
 async function addPurchase(){
   if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const item = document.getElementById('p-item').value.trim();
   if(!item){ showToast('请输入原料名称'); return; }
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
   const photoFileInput = document.getElementById('p-product-photo-file');
-  const photoData = (photoFileInput.files && photoFileInput.files[0]) ? await readFileAsDataURL(photoFileInput.files[0]) : '';
+  const pdfFileInput = document.getElementById('p-product-pdf-file');
+  const photoData = (photoFileInput.files && photoFileInput.files[0]) ? await readFileAsDataURL(photoFileInput.files[0]) : undefined;
+  const pdfData = (pdfFileInput.files && pdfFileInput.files[0]) ? await readFileAsDataURL(pdfFileInput.files[0]) : undefined;
   const isAdvance = document.getElementById('p-is-advance').checked;
-  const rec = {
-    id: uid(),
+  const existing = editingPurchaseId ? purchases.find(x=>x.id===editingPurchaseId) : null;
+  const commonFields = {
     activityId: selectedActivityId,
     date: document.getElementById('p-date').value || new Date().toISOString().slice(0,10),
     supplier: document.getElementById('p-supplier').value.trim(),
@@ -460,18 +479,68 @@ async function addPurchase(){
     repaid: isAdvance ? document.getElementById('p-repaid').checked : false,
     shopName: document.getElementById('p-shop-name').value.trim(),
     productLink: document.getElementById('p-product-link').value.trim(),
-    productPhoto: photoData
+    productPhoto: photoData !== undefined ? photoData : (existing ? existing.productPhoto : ''),
+    productPdf: pdfData !== undefined ? pdfData : (existing ? existing.productPdf : '')
   };
+
+  if(editingPurchaseId){
+    const idx = purchases.findIndex(x=>x.id===editingPurchaseId);
+    const updated = { ...(idx>-1 ? purchases[idx] : {id:editingPurchaseId}), ...commonFields };
+    const {error} = await sb.from('purchases').update(purchaseToRow(updated)).eq('id', editingPurchaseId);
+    if(error){ console.error(error); showToast('更新采购记录失败：'+error.message); return; }
+    if(idx>-1) purchases[idx] = updated;
+    editingPurchaseId = null;
+    resetPurchaseFormUI();
+    resetPurchaseFormFields();
+    renderAll();
+    showToast('采购记录已更新');
+    return;
+  }
+
+  const rec = { id: uid(), ...commonFields };
   const {error} = await sb.from('purchases').insert(purchaseToRow(rec));
   if(error){ console.error(error); showToast('保存采购记录失败：'+error.message); return; }
   purchases.push(rec);
-  ['p-item','p-qty','p-unit','p-price','p-total','p-price-rmb','p-total-rmb','p-supplier','p-note','p-buyer','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
-  photoFileInput.value = '';
-  document.getElementById('p-is-advance').checked = false;
-  document.getElementById('p-repaid').checked = false;
-  toggleRepaidField();
+  resetPurchaseFormFields();
   renderAll();
   showToast('采购记录已保存');
+}
+
+function editPurchase(id){
+  const p = purchases.find(x=>x.id===id);
+  if(!p){ showToast('找不到这条采购记录'); return; }
+  editingPurchaseId = id;
+  selectedActivityId = p.activityId;
+  switchTab('purchase');
+  renderActivityRow('activity-list-purchase', false);
+
+  document.getElementById('p-date').value = p.date || '';
+  document.getElementById('p-supplier').value = p.supplier || '';
+  document.getElementById('p-item').value = p.item || '';
+  document.getElementById('p-qty').value = p.qty || '';
+  document.getElementById('p-unit').value = p.unit || '';
+  document.getElementById('p-price').value = p.unitPrice || '';
+  document.getElementById('p-total').value = p.totalCost || '';
+  document.getElementById('p-price-rmb').value = p.rmbUnitPrice || '';
+  document.getElementById('p-total-rmb').value = p.rmbTotal || '';
+  document.getElementById('p-buyer').value = p.buyer || '';
+  document.getElementById('p-is-advance').checked = !!p.isAdvance;
+  document.getElementById('p-repaid').checked = !!p.repaid;
+  toggleRepaidField();
+  document.getElementById('p-shop-name').value = p.shopName || '';
+  document.getElementById('p-product-link').value = p.productLink || '';
+  document.getElementById('p-note').value = p.note || '';
+
+  document.getElementById('purchase-save-btn').textContent = '更新采购记录';
+  document.getElementById('purchase-cancel-edit-btn').style.display = 'inline-flex';
+  showToast('已载入采购记录，改好后点"更新采购记录"保存（图片/PDF 没重新选就会保留原本的）');
+}
+
+function cancelEditPurchase(){
+  editingPurchaseId = null;
+  resetPurchaseFormUI();
+  resetPurchaseFormFields();
+  showToast('已取消编辑');
 }
 
 async function deletePurchase(id){
@@ -480,6 +549,7 @@ async function deletePurchase(id){
   if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
   purchases = purchases.filter(p=>p.id!==id);
   selectedPurchaseIds.delete(id);
+  if(editingPurchaseId===id){ editingPurchaseId = null; resetPurchaseFormUI(); resetPurchaseFormFields(); }
   renderAll();
 }
 
@@ -660,10 +730,12 @@ function renderPurchaseList(){
         ${p.isAdvance ? `<span class="badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}
         ${p.shopName ? `<span>商家：${p.shopName}</span>` : ''}
         ${p.productLink ? `<span><a href="${p.productLink}" target="_blank" rel="noopener">商品链接 ↗</a></span>` : ''}
+        ${p.productPdf ? `<span><a href="${p.productPdf}" target="_blank" rel="noopener">📄 查看PDF</a></span>` : ''}
         ${p.note ? `<span>备注：${p.note}</span>` : ''}
       </div>
       ${p.productPhoto ? `<img src="${p.productPhoto}" style="max-width:100px;max-height:100px;border-radius:8px;border:1px solid var(--border);margin-top:8px;display:block;">` : ''}
       <div class="item-actions">
+        <button class="btn small ghost" onclick="editPurchase('${p.id}')">✏️ 编辑</button>
         ${p.isAdvance ? `<button class="btn small ghost" onclick="toggleRepaid('${p.id}')">${p.repaid?'标记为待还款':'标记为已还款'}</button>` : ''}
         <button class="btn danger small" onclick="deletePurchase('${p.id}')">删除</button>
       </div>

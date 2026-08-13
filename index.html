@@ -533,12 +533,17 @@
           <input type="file" accept="image/*" id="p-product-photo-file">
         </div>
         <div class="full">
+          <label>PDF文件（选填，例如淘宝订单截图/发票）</label>
+          <input type="file" accept="application/pdf" id="p-product-pdf-file">
+        </div>
+        <div class="full">
           <label>备注</label>
           <input type="text" id="p-note" placeholder="选填">
         </div>
       </div>
       <div class="btn-row">
-        <button class="btn" onclick="addPurchase()">保存采购记录</button>
+        <button class="btn" id="purchase-save-btn" onclick="addPurchase()">保存采购记录</button>
+        <button class="btn ghost" id="purchase-cancel-edit-btn" style="display:none;" onclick="cancelEditPurchase()">取消编辑</button>
       </div>
     </div>
 
