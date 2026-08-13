@@ -1,11 +1,13 @@
 let activities = [];
 let purchases = [];
+let settlements = [];
 let orders = [];
 let products = [];
 let businessProfile = {};
 let editingOrderId = null;
 let editingProductId = null;
 let selectedActivityId = 'all'; // shared selection concept across tabs, 'all' or activity id or 'none'
+let selectedPurchaseIds = new Set(); // for grouping multiple purchase lines into one repayment settlement
 
 const colorMap = {cny:'var(--cny)', midautumn:'var(--midautumn)', generic:'var(--generic)'};
 
@@ -75,6 +77,7 @@ function purchaseToRow(p){
     unit: p.unit || '',
     unit_price: p.unitPrice,
     total_cost: p.totalCost,
+    currency: p.currency || 'MYR',
     note: p.note || '',
     buyer: p.buyer || '',
     is_advance: !!p.isAdvance,
@@ -95,6 +98,7 @@ function rowToPurchase(r){
     unit: r.unit || '',
     unitPrice: Number(r.unit_price)||0,
     totalCost: Number(r.total_cost)||0,
+    currency: r.currency || 'MYR',
     note: r.note || '',
     buyer: r.buyer || '',
     isAdvance: !!r.is_advance,
@@ -103,6 +107,36 @@ function rowToPurchase(r){
     productLink: r.product_link || '',
     productPhoto: r.product_photo || ''
   };
+}
+
+function settlementToRow(s){
+  return {
+    id: s.id,
+    activity_id: s.activityId,
+    buyer: s.buyer || '',
+    purchase_ids: s.purchaseIds || [],
+    rmb_total: s.rmbTotal || 0,
+    myr_amount: s.myrAmount || 0,
+    repaid: !!s.repaid,
+    note: s.note || ''
+  };
+}
+function rowToSettlement(r){
+  return {
+    id: r.id,
+    activityId: r.activity_id,
+    buyer: r.buyer || '',
+    purchaseIds: r.purchase_ids || [],
+    rmbTotal: Number(r.rmb_total)||0,
+    myrAmount: Number(r.myr_amount)||0,
+    repaid: !!r.repaid,
+    note: r.note || ''
+  };
+}
+
+function fmtByCurrency(n, currency){
+  n = Number(n)||0;
+  return currency==='RMB' ? ('¥ ' + n.toFixed(2)) : fmtMoney(n);
 }
 
 function orderToRow(o){
@@ -180,22 +214,25 @@ function rowToBusinessProfile(r){
 async function loadAll(){
   if(!sb){ return; }
   try{
-    const [a, pr, pu, o, bp] = await Promise.all([
+    const [a, pr, pu, ps, o, bp] = await Promise.all([
       sb.from('activities').select('*').order('created_at'),
       sb.from('products').select('*').order('created_at'),
       sb.from('purchases').select('*').order('created_at'),
+      sb.from('purchase_settlements').select('*').order('created_at'),
       sb.from('orders').select('*').order('created_at'),
       sb.from('business_profile').select('*').eq('id', 1).maybeSingle()
     ]);
     if(a.error) throw a.error;
     if(pr.error) throw pr.error;
     if(pu.error) throw pu.error;
+    if(ps.error) throw ps.error;
     if(o.error) throw o.error;
     if(bp.error) throw bp.error;
 
     activities = (a.data||[]).map(rowToActivity);
     products = (pr.data||[]).map(rowToProduct);
     purchases = (pu.data||[]).map(rowToPurchase);
+    settlements = (ps.data||[]).map(rowToSettlement);
     orders = (o.data||[]).map(rowToOrder);
     businessProfile = rowToBusinessProfile(bp.data);
   }catch(e){
@@ -306,14 +343,14 @@ function renderActivityRow(containerId, includeAll){
     const allPill = document.createElement('div');
     allPill.className = 'activity-pill' + (selectedActivityId==='all' ? ' selected' : '');
     allPill.innerHTML = `<span class="dot" style="background:var(--espresso-soft)"></span>全部`;
-    allPill.onclick = ()=>{ selectedActivityId='all'; renderAll(); };
+    allPill.onclick = ()=>{ selectedActivityId='all'; selectedPurchaseIds.clear(); renderAll(); };
     el.appendChild(allPill);
   }
   activities.forEach(a=>{
     const pill = document.createElement('div');
     pill.className = 'activity-pill' + (selectedActivityId===a.id ? ' selected' : '');
     pill.innerHTML = `<span class="dot" style="background:${colorMap[a.color]||colorMap.generic}"></span>${a.icon||''} ${a.name}`;
-    pill.onclick = ()=>{ selectedActivityId = a.id; renderAll(); };
+    pill.onclick = ()=>{ selectedActivityId = a.id; selectedPurchaseIds.clear(); renderAll(); };
     el.appendChild(pill);
   });
   if(containerId === 'activity-list-overview'){
@@ -350,7 +387,8 @@ function renderOverview(){
   const purs = filteredPurchases();
   const revenue = ords.reduce((s,o)=>s+Number(o.totalPrice||0),0);
   const received = ords.reduce((s,o)=>s+Number(o.paidAmount||0),0);
-  const cost = purs.reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const cost = purs.filter(p=>p.currency!=='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const costRmb = purs.filter(p=>p.currency==='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
   const profit = revenue - cost;
 
   const grid = document.getElementById('overview-stats');
@@ -358,9 +396,10 @@ function renderOverview(){
     <div class="stat-card"><div class="label">订单总数</div><div class="value">${ords.length}</div></div>
     <div class="stat-card"><div class="label">总营业额</div><div class="value">${fmtMoney(revenue)}</div></div>
     <div class="stat-card"><div class="label">已收款</div><div class="value good">${fmtMoney(received)}</div></div>
-    <div class="stat-card"><div class="label">采购总成本</div><div class="value">${fmtMoney(cost)}</div></div>
+    <div class="stat-card"><div class="label">采购总成本（MYR）</div><div class="value">${fmtMoney(cost)}</div></div>
     <div class="stat-card"><div class="label">预估利润</div><div class="value ${profit>=0?'good':'bad'}">${fmtMoney(profit)}</div></div>
     <div class="stat-card"><div class="label">未收款</div><div class="value bad">${fmtMoney(revenue-received)}</div></div>
+    ${costRmb>0 ? `<div class="stat-card"><div class="label">人民币采购参考（¥）</div><div class="value">¥ ${costRmb.toFixed(2)}</div></div>` : ''}
   `;
 
   const upcoming = [...ords].filter(o=>o.deliverDate).sort((a,b)=> new Date(a.deliverDate) - new Date(b.deliverDate)).slice(0,8);
@@ -410,6 +449,7 @@ async function addPurchase(){
     unit: document.getElementById('p-unit').value.trim(),
     unitPrice: Number(document.getElementById('p-price').value)||0,
     totalCost: Number(document.getElementById('p-total').value)||0,
+    currency: document.getElementById('p-currency').value,
     note: document.getElementById('p-note').value.trim(),
     buyer: document.getElementById('p-buyer').value.trim(),
     isAdvance,
@@ -423,6 +463,7 @@ async function addPurchase(){
   purchases.push(rec);
   ['p-item','p-qty','p-unit','p-price','p-total','p-supplier','p-note','p-buyer','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
   photoFileInput.value = '';
+  document.getElementById('p-currency').value = 'MYR';
   document.getElementById('p-is-advance').checked = false;
   document.getElementById('p-repaid').checked = false;
   toggleRepaidField();
@@ -435,6 +476,7 @@ async function deletePurchase(id){
   const {error} = await sb.from('purchases').delete().eq('id', id);
   if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
   purchases = purchases.filter(p=>p.id!==id);
+  selectedPurchaseIds.delete(id);
   renderAll();
 }
 
@@ -450,30 +492,167 @@ async function toggleRepaid(id){
   showToast(repaid ? '已标记为还款' : '已标记为待还款');
 }
 
+// ---------- 还款批次（把几笔分开记录的采购，合并成一笔要还给代付人的金额） ----------
+function togglePurchaseSelect(id){
+  if(selectedPurchaseIds.has(id)) selectedPurchaseIds.delete(id);
+  else selectedPurchaseIds.add(id);
+  renderPurchaseList();
+}
+
+function clearPurchaseSelection(){
+  selectedPurchaseIds.clear();
+  renderPurchaseList();
+}
+
+function filteredSettlements(){
+  if(selectedActivityId==='all') return settlements;
+  return settlements.filter(s=>s.activityId===selectedActivityId);
+}
+
+function renderSettlementBuilder(){
+  const box = document.getElementById('settlement-builder');
+  if(!box) return;
+  if(selectedPurchaseIds.size===0){ box.innerHTML = ''; return; }
+  const selected = purchases.filter(p=>selectedPurchaseIds.has(p.id));
+  const rmbTotal = selected.filter(p=>p.currency==='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const buyers = [...new Set(selected.map(p=>p.buyer).filter(Boolean))];
+  box.innerHTML = `
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">已勾选 ${selected.length} 项 <small>合并成一笔还款记录</small></div>
+      <div class="form-grid">
+        <div>
+          <label>还给谁（代付人）</label>
+          <input type="text" id="settle-buyer" value="${buyers.length===1 ? buyers[0] : ''}" placeholder="例如：老公 / 女儿">
+        </div>
+        <div>
+          <label>人民币合计（¥，参考用，自动加总）</label>
+          <input type="number" step="0.01" id="settle-rmb" value="${rmbTotal.toFixed(2)}">
+        </div>
+        <div>
+          <label>实际要还的金额（MYR）</label>
+          <input type="number" step="0.01" id="settle-myr" placeholder="例如：486.09">
+        </div>
+        <div class="full">
+          <label>备注（选填）</label>
+          <input type="text" id="settle-note" placeholder="选填">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="addSettlement()">生成还款记录</button>
+        <button class="btn ghost" onclick="clearPurchaseSelection()">取消勾选</button>
+      </div>
+    </div>
+  `;
+}
+
+async function addSettlement(){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
+  if(selectedPurchaseIds.size===0){ showToast('请先勾选要合并的采购记录'); return; }
+  const myrAmount = Number(document.getElementById('settle-myr').value)||0;
+  if(myrAmount<=0){ showToast('请填写实际要还的 MYR 金额'); return; }
+  const rec = {
+    id: uid(),
+    activityId: selectedActivityId,
+    buyer: document.getElementById('settle-buyer').value.trim(),
+    purchaseIds: [...selectedPurchaseIds],
+    rmbTotal: Number(document.getElementById('settle-rmb').value)||0,
+    myrAmount,
+    repaid: false,
+    note: document.getElementById('settle-note').value.trim()
+  };
+  const {error} = await sb.from('purchase_settlements').insert(settlementToRow(rec));
+  if(error){ console.error(error); showToast('保存还款记录失败：'+error.message); return; }
+  settlements.push(rec);
+  selectedPurchaseIds.clear();
+  renderAll();
+  showToast('还款记录已保存');
+}
+
+async function deleteSettlement(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
+  const {error} = await sb.from('purchase_settlements').delete().eq('id', id);
+  if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
+  settlements = settlements.filter(s=>s.id!==id);
+  renderAll();
+}
+
+async function toggleSettlementRepaid(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
+  const s = settlements.find(x=>x.id===id);
+  if(!s) return;
+  const repaid = !s.repaid;
+  const {error} = await sb.from('purchase_settlements').update({repaid}).eq('id', id);
+  if(error){ console.error(error); showToast('更新失败：'+error.message); return; }
+  s.repaid = repaid;
+  renderAll();
+  showToast(repaid ? '已标记为还款' : '已标记为待还款');
+}
+
+function renderSettlementList(){
+  const box = document.getElementById('settlement-list');
+  if(!box) return;
+  if(selectedActivityId==='all'){ box.innerHTML = ''; return; }
+  const items = filteredSettlements();
+  if(items.length===0){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="section-title">还款记录 <small>多笔采购合并还给代付人的记录</small></div>` + items.map(s=>{
+    const names = s.purchaseIds.map(id=>{
+      const p = purchases.find(x=>x.id===id);
+      return p ? p.item : null;
+    }).filter(Boolean);
+    return `
+    <div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-title">${s.buyer ? '还给 '+s.buyer : '还款记录'}</div>
+          <div class="item-sub">${names.join('、')}</div>
+        </div>
+        <span class="badge ${s.repaid?'paid':'unpaid'}">${s.repaid?'已还款':'待还款'}</span>
+      </div>
+      <div class="item-meta">
+        <span>人民币合计：<b>¥ ${s.rmbTotal.toFixed(2)}</b></span>
+        <span>实还金额：<b>${fmtMoney(s.myrAmount)}</b></span>
+        ${s.note ? `<span>备注：${s.note}</span>` : ''}
+      </div>
+      <div class="item-actions">
+        <button class="btn small ghost" onclick="toggleSettlementRepaid('${s.id}')">${s.repaid?'标记为待还款':'标记为已还款'}</button>
+        <button class="btn danger small" onclick="deleteSettlement('${s.id}')">删除</button>
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
 function renderPurchaseList(){
   renderActivityRow('activity-list-purchase', false);
   const list = document.getElementById('purchase-list');
   const items = filteredPurchases().sort((a,b)=> new Date(b.date)-new Date(a.date));
   if(selectedActivityId==='all'){
     list.innerHTML = '<div class="empty">请选择一个活动来查看和添加采购记录</div>';
+    renderSettlementBuilder();
+    renderSettlementList();
     return;
   }
   if(items.length===0){
     list.innerHTML = '<div class="empty">这个活动还没有采购记录</div>';
+    renderSettlementBuilder();
+    renderSettlementList();
     return;
   }
   list.innerHTML = items.map(p=>`
     <div class="item-card">
       <div class="item-top">
-        <div>
-          <div class="item-title">${p.item}</div>
-          <div class="item-sub">${p.date}${p.supplier ? ' · '+p.supplier : ''}${p.buyer ? ' · 采购人：'+p.buyer : ''}</div>
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+          <input type="checkbox" style="width:auto;margin-top:4px;" ${selectedPurchaseIds.has(p.id)?'checked':''} onchange="togglePurchaseSelect('${p.id}')" title="勾选后可合并成一笔还款记录">
+          <div>
+            <div class="item-title">${p.item}</div>
+            <div class="item-sub">${p.date}${p.supplier ? ' · '+p.supplier : ''}${p.buyer ? ' · 采购人：'+p.buyer : ''}</div>
+          </div>
         </div>
-        <div class="item-title">${fmtMoney(p.totalCost)}</div>
+        <div class="item-title">${fmtByCurrency(p.totalCost, p.currency)}</div>
       </div>
       <div class="item-meta">
         <span>数量：<b>${p.qty} ${p.unit||''}</b></span>
-        <span>单价：<b>${fmtMoney(p.unitPrice)}</b></span>
+        <span>单价：<b>${fmtByCurrency(p.unitPrice, p.currency)}</b></span>
         ${p.isAdvance ? `<span class="badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}
         ${p.shopName ? `<span>商家：${p.shopName}</span>` : ''}
         ${p.productLink ? `<span><a href="${p.productLink}" target="_blank" rel="noopener">商品链接 ↗</a></span>` : ''}
@@ -486,6 +665,8 @@ function renderPurchaseList(){
       </div>
     </div>
   `).join('');
+  renderSettlementBuilder();
+  renderSettlementList();
 }
 
 // ---------- Products ----------
@@ -1273,7 +1454,8 @@ function renderStats(){
   const ords = filteredOrders();
   const purs = filteredPurchases();
   const revenue = ords.reduce((s,o)=>s+Number(o.totalPrice||0),0);
-  const cost = purs.reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const cost = purs.filter(p=>p.currency!=='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const costRmb = purs.filter(p=>p.currency==='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
   const profit = revenue - cost;
   const received = ords.reduce((s,o)=>s+Number(o.paidAmount||0),0);
   let totalDiscount = 0;
@@ -1288,11 +1470,12 @@ function renderStats(){
   document.getElementById('stats-grid').innerHTML = `
     <div class="stat-card"><div class="label">订单数</div><div class="value">${ords.length}</div></div>
     <div class="stat-card"><div class="label">营业额</div><div class="value">${fmtMoney(revenue)}</div></div>
-    <div class="stat-card"><div class="label">采购成本</div><div class="value">${fmtMoney(cost)}</div></div>
+    <div class="stat-card"><div class="label">采购成本（MYR）</div><div class="value">${fmtMoney(cost)}</div></div>
     <div class="stat-card"><div class="label">预估利润</div><div class="value ${profit>=0?'good':'bad'}">${fmtMoney(profit)}</div></div>
     <div class="stat-card"><div class="label">已收款</div><div class="value good">${fmtMoney(received)}</div></div>
     <div class="stat-card"><div class="label">未收款</div><div class="value bad">${fmtMoney(revenue-received)}</div></div>
     <div class="stat-card"><div class="label">让利总额</div><div class="value bad">${fmtMoney(totalDiscount)}</div></div>
+    ${costRmb>0 ? `<div class="stat-card"><div class="label">人民币采购参考（¥）</div><div class="value">¥ ${costRmb.toFixed(2)}</div></div>` : ''}
   `;
 
   // top products

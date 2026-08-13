@@ -30,6 +30,7 @@ create table if not exists purchases (
   unit text,
   unit_price numeric default 0,
   total_cost numeric default 0,
+  currency text default 'MYR',
   note text,
   buyer text,
   is_advance boolean default false,
@@ -40,6 +41,18 @@ create table if not exists purchases (
   created_at timestamptz default now()
 );
 
+create table if not exists purchase_settlements (
+  id text primary key,
+  activity_id text references activities(id) on delete cascade,
+  buyer text,
+  purchase_ids jsonb default '[]'::jsonb,
+  rmb_total numeric default 0,
+  myr_amount numeric default 0,
+  repaid boolean default false,
+  note text,
+  created_at timestamptz default now()
+);
+
 -- 已经建过表的项目：重新执行下面几行把新栏位补上（新项目会被上面的 create table 直接建好，这几行不会重复出错）
 alter table purchases add column if not exists buyer text;
 alter table purchases add column if not exists is_advance boolean default false;
@@ -47,6 +60,7 @@ alter table purchases add column if not exists repaid boolean default false;
 alter table purchases add column if not exists shop_name text;
 alter table purchases add column if not exists product_link text;
 alter table purchases add column if not exists product_photo text;
+alter table purchases add column if not exists currency text default 'MYR';
 
 create table if not exists orders (
   id text primary key,
@@ -88,6 +102,7 @@ create table if not exists business_profile (
 alter table activities enable row level security;
 alter table products enable row level security;
 alter table purchases enable row level security;
+alter table purchase_settlements enable row level security;
 alter table orders enable row level security;
 alter table business_profile enable row level security;
 
@@ -105,6 +120,11 @@ create policy "public read" on purchases for select using (true);
 create policy "public insert" on purchases for insert with check (true);
 create policy "public update" on purchases for update using (true);
 create policy "public delete" on purchases for delete using (true);
+
+create policy "public read" on purchase_settlements for select using (true);
+create policy "public insert" on purchase_settlements for insert with check (true);
+create policy "public update" on purchase_settlements for update using (true);
+create policy "public delete" on purchase_settlements for delete using (true);
 
 create policy "public read" on orders for select using (true);
 create policy "public insert" on orders for insert with check (true);
