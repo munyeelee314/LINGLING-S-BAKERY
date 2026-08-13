@@ -50,10 +50,13 @@ create table if not exists purchase_settlements (
   purchase_ids jsonb default '[]'::jsonb,
   rmb_total numeric default 0,
   myr_amount numeric default 0,
+  needs_repay boolean default false,
   repaid boolean default false,
   note text,
   created_at timestamptz default now()
 );
+
+alter table purchase_settlements add column if not exists needs_repay boolean default false;
 
 -- 已经建过表的项目：重新执行下面几行把新栏位补上（新项目会被上面的 create table 直接建好，这几行不会重复出错）
 alter table purchases add column if not exists buyer text;

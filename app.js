@@ -122,6 +122,7 @@ function settlementToRow(s){
     purchase_ids: s.purchaseIds || [],
     rmb_total: s.rmbTotal || 0,
     myr_amount: s.myrAmount || 0,
+    needs_repay: !!s.needsRepay,
     repaid: !!s.repaid,
     note: s.note || ''
   };
@@ -134,6 +135,7 @@ function rowToSettlement(r){
     purchaseIds: r.purchase_ids || [],
     rmbTotal: Number(r.rmb_total)||0,
     myrAmount: Number(r.myr_amount)||0,
+    needsRepay: !!r.needs_repay,
     repaid: !!r.repaid,
     note: r.note || ''
   };
@@ -391,7 +393,7 @@ function renderOverview(){
   const purs = filteredPurchases();
   const revenue = ords.reduce((s,o)=>s+Number(o.totalPrice||0),0);
   const received = ords.reduce((s,o)=>s+Number(o.paidAmount||0),0);
-  const cost = purs.reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const cost = purchaseCostTotal(purs, filteredSettlements());
   const costRmb = purs.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
   const profit = revenue - cost;
 
@@ -582,28 +584,61 @@ function filteredSettlements(){
   return settlements.filter(s=>s.activityId===selectedActivityId);
 }
 
+// 已经并入合并结算记录的采购 id：算成本时用结算的真实总额代替，不重复计算单笔金额
+function settledPurchaseIds(){
+  const set = new Set();
+  settlements.forEach(s=>(s.purchaseIds||[]).forEach(id=>set.add(id)));
+  return set;
+}
+
+function purchaseCostTotal(purs, sttls){
+  const settled = settledPurchaseIds();
+  const lineTotal = purs.filter(p=>!settled.has(p.id)).reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const settlementTotal = sttls.reduce((s,st)=>s+Number(st.myrAmount||0),0);
+  return lineTotal + settlementTotal;
+}
+
+function toggleSettleRepaidField(){
+  const needsRepay = document.getElementById('settle-needs-repay').checked;
+  document.getElementById('settle-repaid-wrapper').style.display = needsRepay ? 'block' : 'none';
+  document.getElementById('settle-repaid-check-wrapper').style.display = needsRepay ? 'block' : 'none';
+}
+
 function renderSettlementBuilder(){
   const box = document.getElementById('settlement-builder');
   if(!box) return;
   if(selectedPurchaseIds.size===0){ box.innerHTML = ''; return; }
   const selected = purchases.filter(p=>selectedPurchaseIds.has(p.id));
   const rmbTotal = selected.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
+  const myrLineSum = selected.reduce((s,p)=>s+Number(p.totalCost||0),0);
   const buyers = [...new Set(selected.map(p=>p.buyer).filter(Boolean))];
   box.innerHTML = `
     <div class="card">
-      <div class="section-title" style="margin-top:0;">已勾选 ${selected.length} 项 <small>合并成一笔还款记录</small></div>
+      <div class="section-title" style="margin-top:0;">已勾选 ${selected.length} 项 <small>合并记录这几笔单真实的总金额（运费/手续费等常常让单笔总和对不上）</small></div>
       <div class="form-grid">
-        <div>
-          <label>还给谁（代付人）</label>
-          <input type="text" id="settle-buyer" value="${buyers.length===1 ? buyers[0] : ''}" placeholder="例如：老公 / 女儿">
-        </div>
         <div>
           <label>人民币合计（¥，参考用，自动加总）</label>
           <input type="number" step="0.01" id="settle-rmb" value="${rmbTotal.toFixed(2)}">
         </div>
         <div>
-          <label>实际要还的金额（MYR）</label>
+          <label>实际总额（MYR）<small style="font-weight:400;">单笔加起来是 ${fmtMoney(myrLineSum)}</small></label>
           <input type="number" step="0.01" id="settle-myr" placeholder="例如：486.09">
+        </div>
+        <div class="full" style="display:flex;align-items:center;gap:8px;">
+          <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--espresso);font-weight:normal;">
+            <input type="checkbox" id="settle-needs-repay" style="width:auto;" onchange="toggleSettleRepaidField()">
+            这是别人代付的（需要还款）
+          </label>
+        </div>
+        <div id="settle-repaid-wrapper" style="display:none;">
+          <label>还给谁（代付人）</label>
+          <input type="text" id="settle-buyer" value="${buyers.length===1 ? buyers[0] : ''}" placeholder="例如：老公 / 女儿">
+        </div>
+        <div id="settle-repaid-check-wrapper" style="display:none;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--espresso);font-weight:normal;">
+            <input type="checkbox" id="settle-repaid" style="width:auto;">
+            已还款
+          </label>
         </div>
         <div class="full">
           <label>备注（选填）</label>
@@ -611,7 +646,7 @@ function renderSettlementBuilder(){
         </div>
       </div>
       <div class="btn-row">
-        <button class="btn" onclick="addSettlement()">生成还款记录</button>
+        <button class="btn" onclick="addSettlement()">生成合并结算记录</button>
         <button class="btn ghost" onclick="clearPurchaseSelection()">取消勾选</button>
       </div>
     </div>
@@ -622,23 +657,25 @@ async function addSettlement(){
   if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   if(selectedPurchaseIds.size===0){ showToast('请先勾选要合并的采购记录'); return; }
   const myrAmount = Number(document.getElementById('settle-myr').value)||0;
-  if(myrAmount<=0){ showToast('请填写实际要还的 MYR 金额'); return; }
+  if(myrAmount<=0){ showToast('请填写实际总额（MYR）'); return; }
+  const needsRepay = document.getElementById('settle-needs-repay').checked;
   const rec = {
     id: uid(),
     activityId: selectedActivityId,
-    buyer: document.getElementById('settle-buyer').value.trim(),
+    buyer: needsRepay ? document.getElementById('settle-buyer').value.trim() : '',
     purchaseIds: [...selectedPurchaseIds],
     rmbTotal: Number(document.getElementById('settle-rmb').value)||0,
     myrAmount,
-    repaid: false,
+    needsRepay,
+    repaid: needsRepay ? document.getElementById('settle-repaid').checked : false,
     note: document.getElementById('settle-note').value.trim()
   };
   const {error} = await sb.from('purchase_settlements').insert(settlementToRow(rec));
-  if(error){ console.error(error); showToast('保存还款记录失败：'+error.message); return; }
+  if(error){ console.error(error); showToast('保存合并结算记录失败：'+error.message); return; }
   settlements.push(rec);
   selectedPurchaseIds.clear();
   renderAll();
-  showToast('还款记录已保存');
+  showToast('合并结算记录已保存');
 }
 
 async function deleteSettlement(id){
@@ -667,7 +704,7 @@ function renderSettlementList(){
   if(selectedActivityId==='all'){ box.innerHTML = ''; return; }
   const items = filteredSettlements();
   if(items.length===0){ box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="section-title">还款记录 <small>多笔采购合并还给代付人的记录</small></div>` + items.map(s=>{
+  box.innerHTML = `<div class="section-title">合并结算记录 <small>多笔采购合并后的真实总额</small></div>` + items.map(s=>{
     const names = s.purchaseIds.map(id=>{
       const p = purchases.find(x=>x.id===id);
       return p ? p.item : null;
@@ -676,18 +713,18 @@ function renderSettlementList(){
     <div class="item-card">
       <div class="item-top">
         <div>
-          <div class="item-title">${s.buyer ? '还给 '+s.buyer : '还款记录'}</div>
+          <div class="item-title">${s.needsRepay && s.buyer ? '还给 '+s.buyer : '合并结算'}</div>
           <div class="item-sub">${names.join('、')}</div>
         </div>
-        <span class="badge ${s.repaid?'paid':'unpaid'}">${s.repaid?'已还款':'待还款'}</span>
+        ${s.needsRepay ? `<span class="badge ${s.repaid?'paid':'unpaid'}">${s.repaid?'已还款':'待还款'}</span>` : ''}
       </div>
       <div class="item-meta">
         <span>人民币合计：<b>¥ ${s.rmbTotal.toFixed(2)}</b></span>
-        <span>实还金额：<b>${fmtMoney(s.myrAmount)}</b></span>
+        <span>实际总额：<b>${fmtMoney(s.myrAmount)}</b></span>
         ${s.note ? `<span>备注：${s.note}</span>` : ''}
       </div>
       <div class="item-actions">
-        <button class="btn small ghost" onclick="toggleSettlementRepaid('${s.id}')">${s.repaid?'标记为待还款':'标记为已还款'}</button>
+        ${s.needsRepay ? `<button class="btn small ghost" onclick="toggleSettlementRepaid('${s.id}')">${s.repaid?'标记为待还款':'标记为已还款'}</button>` : ''}
         <button class="btn danger small" onclick="deleteSettlement('${s.id}')">删除</button>
       </div>
     </div>
@@ -711,11 +748,12 @@ function renderPurchaseList(){
     renderSettlementList();
     return;
   }
+  const settled = settledPurchaseIds();
   list.innerHTML = items.map(p=>`
     <div class="item-card">
       <div class="item-top">
         <div style="display:flex;gap:8px;align-items:flex-start;">
-          <input type="checkbox" style="width:auto;margin-top:4px;" ${selectedPurchaseIds.has(p.id)?'checked':''} onchange="togglePurchaseSelect('${p.id}')" title="勾选后可合并成一笔还款记录">
+          <input type="checkbox" style="width:auto;margin-top:4px;" ${selectedPurchaseIds.has(p.id)?'checked':''} onchange="togglePurchaseSelect('${p.id}')" title="勾选后可合并记录这几笔单真实的总金额">
           <div>
             <div class="item-title">${p.item}</div>
             <div class="item-sub">${p.date}${p.supplier ? ' · '+p.supplier : ''}${p.buyer ? ' · 采购人：'+p.buyer : ''}</div>
@@ -727,6 +765,7 @@ function renderPurchaseList(){
         <span>数量：<b>${p.qty} ${p.unit||''}</b></span>
         <span>单价：<b>${fmtMoney(p.unitPrice)}</b></span>
         ${p.rmbTotal ? `<span>人民币：<b>${fmtRmb(p.rmbTotal)}</b>${p.rmbUnitPrice ? '（单价 '+fmtRmb(p.rmbUnitPrice)+'）' : ''}</span>` : ''}
+        ${settled.has(p.id) ? `<span>📎 已并入合并结算记录（成本按结算的真实总额算，不会重复计算这里的金额）</span>` : ''}
         ${p.isAdvance ? `<span class="badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}
         ${p.shopName ? `<span>商家：${p.shopName}</span>` : ''}
         ${p.productLink ? `<span><a href="${p.productLink}" target="_blank" rel="noopener">商品链接 ↗</a></span>` : ''}
@@ -1530,7 +1569,7 @@ function renderStats(){
   const ords = filteredOrders();
   const purs = filteredPurchases();
   const revenue = ords.reduce((s,o)=>s+Number(o.totalPrice||0),0);
-  const cost = purs.reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const cost = purchaseCostTotal(purs, filteredSettlements());
   const costRmb = purs.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
   const profit = revenue - cost;
   const received = ords.reduce((s,o)=>s+Number(o.paidAmount||0),0);
