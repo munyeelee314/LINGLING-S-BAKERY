@@ -501,12 +501,13 @@
         </div>
         <div>
           <label>采购人（谁付的钱）</label>
-          <input type="text" id="p-buyer" list="buyer-suggestions" placeholder="例如：自己 / 老公 / 女儿">
-          <datalist id="buyer-suggestions">
-            <option value="自己">
-            <option value="老公">
-            <option value="女儿">
-          </datalist>
+          <select id="p-buyer-select" onchange="toggleOtherField('p-buyer-select','p-buyer-other')">
+            <option value="LINGLING">LINGLING</option>
+            <option value="JOLEE">JOLEE</option>
+            <option value="ZM">ZM</option>
+            <option value="OTHER">OTHER</option>
+          </select>
+          <input type="text" id="p-buyer-other" style="display:none;margin-top:8px;" placeholder="请输入姓名">
         </div>
         <div class="full" style="display:flex;align-items:center;gap:8px;">
           <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--espresso);font-weight:normal;">
@@ -567,12 +568,13 @@
         </div>
         <div>
           <label>对接人（谁负责联络这个客户）</label>
-          <input type="text" id="o-contact" list="contact-suggestions" placeholder="例如：自己 / 老公 / 女儿">
-          <datalist id="contact-suggestions">
-            <option value="自己">
-            <option value="老公">
-            <option value="女儿">
-          </datalist>
+          <select id="o-contact-select" onchange="toggleOtherField('o-contact-select','o-contact-other')">
+            <option value="LINGLING">LINGLING</option>
+            <option value="JOLEE">JOLEE</option>
+            <option value="ZM">ZM</option>
+            <option value="OTHER">OTHER</option>
+          </select>
+          <input type="text" id="o-contact-other" style="display:none;margin-top:8px;" placeholder="请输入姓名">
         </div>
         <div>
           <label>联系电话</label>

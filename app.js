@@ -36,6 +36,31 @@ function uid(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 }
 
+// ---------- 固定人名选单 + OTHER 自由输入 ----------
+function toggleOtherField(selectId, otherId){
+  const select = document.getElementById(selectId);
+  document.getElementById(otherId).style.display = select.value==='OTHER' ? 'block' : 'none';
+}
+function getOtherAwareValue(selectId, otherId){
+  const select = document.getElementById(selectId);
+  if(select.value==='OTHER') return document.getElementById(otherId).value.trim();
+  return select.value;
+}
+function setOtherAwareValue(selectId, otherId, value){
+  const select = document.getElementById(selectId);
+  const otherInput = document.getElementById(otherId);
+  const known = Array.from(select.options).map(o=>o.value).filter(v=>v!=='OTHER');
+  if(value && known.includes(value)){
+    select.value = value;
+    otherInput.style.display = 'none';
+    otherInput.value = '';
+  } else {
+    select.value = 'OTHER';
+    otherInput.style.display = value ? 'block' : 'none';
+    otherInput.value = value || '';
+  }
+}
+
 // ---------- Row <-> JS field mapping ----------
 function activityToRow(a){
   return { id: a.id, name: a.name, icon: a.icon, color: a.color };
@@ -445,7 +470,8 @@ function resetPurchaseFormUI(){
 }
 
 function resetPurchaseFormFields(){
-  ['p-item','p-qty','p-unit','p-price','p-total','p-price-rmb','p-total-rmb','p-supplier','p-note','p-buyer','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
+  ['p-item','p-qty','p-unit','p-price','p-total','p-price-rmb','p-total-rmb','p-supplier','p-note','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
+  setOtherAwareValue('p-buyer-select','p-buyer-other','');
   document.getElementById('p-product-photo-file').value = '';
   document.getElementById('p-product-pdf-file').value = '';
   document.getElementById('p-is-advance').checked = false;
@@ -476,7 +502,7 @@ async function addPurchase(){
     rmbUnitPrice: Number(document.getElementById('p-price-rmb').value)||0,
     rmbTotal: Number(document.getElementById('p-total-rmb').value)||0,
     note: document.getElementById('p-note').value.trim(),
-    buyer: document.getElementById('p-buyer').value.trim(),
+    buyer: getOtherAwareValue('p-buyer-select','p-buyer-other'),
     isAdvance,
     repaid: isAdvance ? document.getElementById('p-repaid').checked : false,
     shopName: document.getElementById('p-shop-name').value.trim(),
@@ -525,7 +551,7 @@ function editPurchase(id){
   document.getElementById('p-total').value = p.totalCost || '';
   document.getElementById('p-price-rmb').value = p.rmbUnitPrice || '';
   document.getElementById('p-total-rmb').value = p.rmbTotal || '';
-  document.getElementById('p-buyer').value = p.buyer || '';
+  setOtherAwareValue('p-buyer-select','p-buyer-other', p.buyer || '');
   document.getElementById('p-is-advance').checked = !!p.isAdvance;
   document.getElementById('p-repaid').checked = !!p.repaid;
   toggleRepaidField();
@@ -1098,7 +1124,7 @@ async function addOrder(){
   const commonFields = {
     activityId: selectedActivityId,
     customerName: name,
-    contactPerson: document.getElementById('o-contact').value.trim() || '自己',
+    contactPerson: getOtherAwareValue('o-contact-select','o-contact-other'),
     phone: document.getElementById('o-phone').value.trim(),
     items,
     totalPrice,
@@ -1119,7 +1145,8 @@ async function addOrder(){
     orders[idx] = updated;
     editingOrderId = null;
     resetOrderFormUI();
-    ['o-name','o-contact','o-phone','o-note','o-address','o-delivertime'].forEach(id=>document.getElementById(id).value='');
+    ['o-name','o-phone','o-note','o-address','o-delivertime'].forEach(id=>document.getElementById(id).value='');
+    setOtherAwareValue('o-contact-select','o-contact-other','');
     document.getElementById('o-delivery-method').value = 'pickup';
     toggleAddressField();
     resetOrderItemRows();
@@ -1138,7 +1165,8 @@ async function addOrder(){
   const {error} = await sb.from('orders').insert(orderToRow(rec));
   if(error){ console.error(error); showToast('保存订单失败：'+error.message); return; }
   orders.push(rec);
-  ['o-name','o-contact','o-phone','o-note','o-address','o-delivertime'].forEach(id=>document.getElementById(id).value='');
+  ['o-name','o-phone','o-note','o-address','o-delivertime'].forEach(id=>document.getElementById(id).value='');
+  setOtherAwareValue('o-contact-select','o-contact-other','');
   document.getElementById('o-delivery-method').value = 'pickup';
   toggleAddressField();
   resetOrderItemRows();
@@ -1161,7 +1189,7 @@ function editOrder(id){
   updateProductSuggestions();
 
   document.getElementById('o-name').value = o.customerName || '';
-  document.getElementById('o-contact').value = o.contactPerson || '';
+  setOtherAwareValue('o-contact-select','o-contact-other', o.contactPerson || '');
   document.getElementById('o-phone').value = o.phone || '';
   document.getElementById('o-orderdate').value = o.orderDate || '';
   document.getElementById('o-deliverdate').value = o.deliverDate || '';
@@ -1213,7 +1241,8 @@ function editOrder(id){
 function cancelEditOrder(){
   editingOrderId = null;
   resetOrderFormUI();
-  ['o-name','o-contact','o-phone','o-note','o-address','o-delivertime'].forEach(id=>document.getElementById(id).value='');
+  ['o-name','o-phone','o-note','o-address','o-delivertime'].forEach(id=>document.getElementById(id).value='');
+  setOtherAwareValue('o-contact-select','o-contact-other','');
   document.getElementById('o-delivery-method').value = 'pickup';
   toggleAddressField();
   resetOrderItemRows();
