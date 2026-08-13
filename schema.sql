@@ -30,7 +30,8 @@ create table if not exists purchases (
   unit text,
   unit_price numeric default 0,
   total_cost numeric default 0,
-  currency text default 'MYR',
+  rmb_unit_price numeric default 0,
+  rmb_total numeric default 0,
   note text,
   buyer text,
   is_advance boolean default false,
@@ -61,6 +62,8 @@ alter table purchases add column if not exists shop_name text;
 alter table purchases add column if not exists product_link text;
 alter table purchases add column if not exists product_photo text;
 alter table purchases add column if not exists currency text default 'MYR';
+alter table purchases add column if not exists rmb_unit_price numeric default 0;
+alter table purchases add column if not exists rmb_total numeric default 0;
 
 create table if not exists orders (
   id text primary key,

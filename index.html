@@ -484,19 +484,20 @@
           <input type="text" id="p-unit" placeholder="kg / 包 / 打">
         </div>
         <div>
-          <label>单价</label>
+          <label>单价（RM）</label>
           <input type="number" step="0.01" id="p-price" placeholder="例如：5.50">
         </div>
         <div>
-          <label>总成本</label>
+          <label>总成本（RM）</label>
           <input type="number" step="0.01" id="p-total" placeholder="自动计算" readonly>
         </div>
         <div>
-          <label>货币</label>
-          <select id="p-currency">
-            <option value="MYR">MYR（令吉）</option>
-            <option value="RMB">RMB（人民币 ¥）</option>
-          </select>
+          <label>人民币单价（¥，选填）</label>
+          <input type="number" step="0.01" id="p-price-rmb" placeholder="例如：11.80">
+        </div>
+        <div>
+          <label>人民币总额（¥，自动计算）</label>
+          <input type="number" step="0.01" id="p-total-rmb" placeholder="自动计算" readonly>
         </div>
         <div>
           <label>采购人（谁付的钱）</label>

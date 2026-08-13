@@ -77,7 +77,8 @@ function purchaseToRow(p){
     unit: p.unit || '',
     unit_price: p.unitPrice,
     total_cost: p.totalCost,
-    currency: p.currency || 'MYR',
+    rmb_unit_price: p.rmbUnitPrice || 0,
+    rmb_total: p.rmbTotal || 0,
     note: p.note || '',
     buyer: p.buyer || '',
     is_advance: !!p.isAdvance,
@@ -98,7 +99,8 @@ function rowToPurchase(r){
     unit: r.unit || '',
     unitPrice: Number(r.unit_price)||0,
     totalCost: Number(r.total_cost)||0,
-    currency: r.currency || 'MYR',
+    rmbUnitPrice: Number(r.rmb_unit_price)||0,
+    rmbTotal: Number(r.rmb_total)||0,
     note: r.note || '',
     buyer: r.buyer || '',
     isAdvance: !!r.is_advance,
@@ -134,9 +136,8 @@ function rowToSettlement(r){
   };
 }
 
-function fmtByCurrency(n, currency){
-  n = Number(n)||0;
-  return currency==='RMB' ? ('¥ ' + n.toFixed(2)) : fmtMoney(n);
+function fmtRmb(n){
+  return '¥ ' + (Number(n)||0).toFixed(2);
 }
 
 function orderToRow(o){
@@ -387,8 +388,8 @@ function renderOverview(){
   const purs = filteredPurchases();
   const revenue = ords.reduce((s,o)=>s+Number(o.totalPrice||0),0);
   const received = ords.reduce((s,o)=>s+Number(o.paidAmount||0),0);
-  const cost = purs.filter(p=>p.currency!=='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
-  const costRmb = purs.filter(p=>p.currency==='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const cost = purs.reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const costRmb = purs.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
   const profit = revenue - cost;
 
   const grid = document.getElementById('overview-stats');
@@ -424,6 +425,8 @@ function calcPurchaseTotal(){
   const qty = Number(document.getElementById('p-qty').value)||0;
   const price = Number(document.getElementById('p-price').value)||0;
   document.getElementById('p-total').value = (qty*price).toFixed(2);
+  const priceRmb = Number(document.getElementById('p-price-rmb').value)||0;
+  document.getElementById('p-total-rmb').value = (qty*priceRmb).toFixed(2);
 }
 
 function toggleRepaidField(){
@@ -449,7 +452,8 @@ async function addPurchase(){
     unit: document.getElementById('p-unit').value.trim(),
     unitPrice: Number(document.getElementById('p-price').value)||0,
     totalCost: Number(document.getElementById('p-total').value)||0,
-    currency: document.getElementById('p-currency').value,
+    rmbUnitPrice: Number(document.getElementById('p-price-rmb').value)||0,
+    rmbTotal: Number(document.getElementById('p-total-rmb').value)||0,
     note: document.getElementById('p-note').value.trim(),
     buyer: document.getElementById('p-buyer').value.trim(),
     isAdvance,
@@ -461,9 +465,8 @@ async function addPurchase(){
   const {error} = await sb.from('purchases').insert(purchaseToRow(rec));
   if(error){ console.error(error); showToast('保存采购记录失败：'+error.message); return; }
   purchases.push(rec);
-  ['p-item','p-qty','p-unit','p-price','p-total','p-supplier','p-note','p-buyer','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
+  ['p-item','p-qty','p-unit','p-price','p-total','p-price-rmb','p-total-rmb','p-supplier','p-note','p-buyer','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
   photoFileInput.value = '';
-  document.getElementById('p-currency').value = 'MYR';
   document.getElementById('p-is-advance').checked = false;
   document.getElementById('p-repaid').checked = false;
   toggleRepaidField();
@@ -514,7 +517,7 @@ function renderSettlementBuilder(){
   if(!box) return;
   if(selectedPurchaseIds.size===0){ box.innerHTML = ''; return; }
   const selected = purchases.filter(p=>selectedPurchaseIds.has(p.id));
-  const rmbTotal = selected.filter(p=>p.currency==='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const rmbTotal = selected.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
   const buyers = [...new Set(selected.map(p=>p.buyer).filter(Boolean))];
   box.innerHTML = `
     <div class="card">
@@ -648,11 +651,12 @@ function renderPurchaseList(){
             <div class="item-sub">${p.date}${p.supplier ? ' · '+p.supplier : ''}${p.buyer ? ' · 采购人：'+p.buyer : ''}</div>
           </div>
         </div>
-        <div class="item-title">${fmtByCurrency(p.totalCost, p.currency)}</div>
+        <div class="item-title">${fmtMoney(p.totalCost)}</div>
       </div>
       <div class="item-meta">
         <span>数量：<b>${p.qty} ${p.unit||''}</b></span>
-        <span>单价：<b>${fmtByCurrency(p.unitPrice, p.currency)}</b></span>
+        <span>单价：<b>${fmtMoney(p.unitPrice)}</b></span>
+        ${p.rmbTotal ? `<span>人民币：<b>${fmtRmb(p.rmbTotal)}</b>${p.rmbUnitPrice ? '（单价 '+fmtRmb(p.rmbUnitPrice)+'）' : ''}</span>` : ''}
         ${p.isAdvance ? `<span class="badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}
         ${p.shopName ? `<span>商家：${p.shopName}</span>` : ''}
         ${p.productLink ? `<span><a href="${p.productLink}" target="_blank" rel="noopener">商品链接 ↗</a></span>` : ''}
@@ -1454,8 +1458,8 @@ function renderStats(){
   const ords = filteredOrders();
   const purs = filteredPurchases();
   const revenue = ords.reduce((s,o)=>s+Number(o.totalPrice||0),0);
-  const cost = purs.filter(p=>p.currency!=='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
-  const costRmb = purs.filter(p=>p.currency==='RMB').reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const cost = purs.reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const costRmb = purs.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
   const profit = revenue - cost;
   const received = ords.reduce((s,o)=>s+Number(o.paidAmount||0),0);
   let totalDiscount = 0;
@@ -1538,6 +1542,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 
 document.getElementById('p-qty').addEventListener('input', calcPurchaseTotal);
 document.getElementById('p-price').addEventListener('input', calcPurchaseTotal);
+document.getElementById('p-price-rmb').addEventListener('input', calcPurchaseTotal);
 
 // default dates
 document.getElementById('p-date').value = new Date().toISOString().slice(0,10);
