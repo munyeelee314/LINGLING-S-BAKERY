@@ -75,7 +75,13 @@ function purchaseToRow(p){
     unit: p.unit || '',
     unit_price: p.unitPrice,
     total_cost: p.totalCost,
-    note: p.note || ''
+    note: p.note || '',
+    buyer: p.buyer || '',
+    is_advance: !!p.isAdvance,
+    repaid: !!p.repaid,
+    shop_name: p.shopName || '',
+    product_link: p.productLink || '',
+    product_photo: p.productPhoto || ''
   };
 }
 function rowToPurchase(r){
@@ -89,7 +95,13 @@ function rowToPurchase(r){
     unit: r.unit || '',
     unitPrice: Number(r.unit_price)||0,
     totalCost: Number(r.total_cost)||0,
-    note: r.note || ''
+    note: r.note || '',
+    buyer: r.buyer || '',
+    isAdvance: !!r.is_advance,
+    repaid: !!r.repaid,
+    shopName: r.shop_name || '',
+    productLink: r.product_link || '',
+    productPhoto: r.product_photo || ''
   };
 }
 
@@ -375,11 +387,19 @@ function calcPurchaseTotal(){
   document.getElementById('p-total').value = (qty*price).toFixed(2);
 }
 
+function toggleRepaidField(){
+  const isAdvance = document.getElementById('p-is-advance').checked;
+  document.getElementById('p-repaid-wrapper').style.display = isAdvance ? 'block' : 'none';
+}
+
 async function addPurchase(){
   if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
   const item = document.getElementById('p-item').value.trim();
   if(!item){ showToast('请输入原料名称'); return; }
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
+  const photoFileInput = document.getElementById('p-product-photo-file');
+  const photoData = (photoFileInput.files && photoFileInput.files[0]) ? await readFileAsDataURL(photoFileInput.files[0]) : '';
+  const isAdvance = document.getElementById('p-is-advance').checked;
   const rec = {
     id: uid(),
     activityId: selectedActivityId,
@@ -390,12 +410,22 @@ async function addPurchase(){
     unit: document.getElementById('p-unit').value.trim(),
     unitPrice: Number(document.getElementById('p-price').value)||0,
     totalCost: Number(document.getElementById('p-total').value)||0,
-    note: document.getElementById('p-note').value.trim()
+    note: document.getElementById('p-note').value.trim(),
+    buyer: document.getElementById('p-buyer').value.trim(),
+    isAdvance,
+    repaid: isAdvance ? document.getElementById('p-repaid').checked : false,
+    shopName: document.getElementById('p-shop-name').value.trim(),
+    productLink: document.getElementById('p-product-link').value.trim(),
+    productPhoto: photoData
   };
   const {error} = await sb.from('purchases').insert(purchaseToRow(rec));
   if(error){ console.error(error); showToast('保存采购记录失败：'+error.message); return; }
   purchases.push(rec);
-  ['p-item','p-qty','p-unit','p-price','p-total','p-supplier','p-note'].forEach(id=>document.getElementById(id).value='');
+  ['p-item','p-qty','p-unit','p-price','p-total','p-supplier','p-note','p-buyer','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
+  photoFileInput.value = '';
+  document.getElementById('p-is-advance').checked = false;
+  document.getElementById('p-repaid').checked = false;
+  toggleRepaidField();
   renderAll();
   showToast('采购记录已保存');
 }
@@ -406,6 +436,18 @@ async function deletePurchase(id){
   if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
   purchases = purchases.filter(p=>p.id!==id);
   renderAll();
+}
+
+async function toggleRepaid(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
+  const p = purchases.find(x=>x.id===id);
+  if(!p) return;
+  const repaid = !p.repaid;
+  const {error} = await sb.from('purchases').update({repaid}).eq('id', id);
+  if(error){ console.error(error); showToast('更新失败：'+error.message); return; }
+  p.repaid = repaid;
+  renderAll();
+  showToast(repaid ? '已标记为还款' : '已标记为待还款');
 }
 
 function renderPurchaseList(){
@@ -425,16 +467,21 @@ function renderPurchaseList(){
       <div class="item-top">
         <div>
           <div class="item-title">${p.item}</div>
-          <div class="item-sub">${p.date}${p.supplier ? ' · '+p.supplier : ''}</div>
+          <div class="item-sub">${p.date}${p.supplier ? ' · '+p.supplier : ''}${p.buyer ? ' · 采购人：'+p.buyer : ''}</div>
         </div>
         <div class="item-title">${fmtMoney(p.totalCost)}</div>
       </div>
       <div class="item-meta">
         <span>数量：<b>${p.qty} ${p.unit||''}</b></span>
         <span>单价：<b>${fmtMoney(p.unitPrice)}</b></span>
+        ${p.isAdvance ? `<span class="badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}
+        ${p.shopName ? `<span>商家：${p.shopName}</span>` : ''}
+        ${p.productLink ? `<span><a href="${p.productLink}" target="_blank" rel="noopener">商品链接 ↗</a></span>` : ''}
         ${p.note ? `<span>备注：${p.note}</span>` : ''}
       </div>
+      ${p.productPhoto ? `<img src="${p.productPhoto}" style="max-width:100px;max-height:100px;border-radius:8px;border:1px solid var(--border);margin-top:8px;display:block;">` : ''}
       <div class="item-actions">
+        ${p.isAdvance ? `<button class="btn small ghost" onclick="toggleRepaid('${p.id}')">${p.repaid?'标记为待还款':'标记为已还款'}</button>` : ''}
         <button class="btn danger small" onclick="deletePurchase('${p.id}')">删除</button>
       </div>
     </div>

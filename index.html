@@ -491,6 +491,39 @@
           <label>总成本（RM）</label>
           <input type="number" step="0.01" id="p-total" placeholder="自动计算" readonly>
         </div>
+        <div>
+          <label>采购人（谁付的钱）</label>
+          <input type="text" id="p-buyer" list="buyer-suggestions" placeholder="例如：自己 / 老公 / 女儿">
+          <datalist id="buyer-suggestions">
+            <option value="自己">
+            <option value="老公">
+            <option value="女儿">
+          </datalist>
+        </div>
+        <div class="full" style="display:flex;align-items:center;gap:8px;">
+          <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--espresso);font-weight:normal;">
+            <input type="checkbox" id="p-is-advance" style="width:auto;" onchange="toggleRepaidField()">
+            这是代买/代付的（需要还款）
+          </label>
+        </div>
+        <div class="full" id="p-repaid-wrapper" style="display:none;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--espresso);font-weight:normal;">
+            <input type="checkbox" id="p-repaid" style="width:auto;">
+            已还款
+          </label>
+        </div>
+        <div class="full">
+          <label>商家名称（选填，例如淘宝店铺名，方便下次找回）</label>
+          <input type="text" id="p-shop-name" placeholder="选填">
+        </div>
+        <div class="full">
+          <label>商品链接（选填）</label>
+          <input type="url" id="p-product-link" placeholder="选填，例如淘宝商品网址">
+        </div>
+        <div class="full">
+          <label>商品照片（选填）</label>
+          <input type="file" accept="image/*" id="p-product-photo-file">
+        </div>
         <div class="full">
           <label>备注</label>
           <input type="text" id="p-note" placeholder="选填">

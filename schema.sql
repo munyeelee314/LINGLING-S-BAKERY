@@ -31,8 +31,22 @@ create table if not exists purchases (
   unit_price numeric default 0,
   total_cost numeric default 0,
   note text,
+  buyer text,
+  is_advance boolean default false,
+  repaid boolean default false,
+  shop_name text,
+  product_link text,
+  product_photo text,
   created_at timestamptz default now()
 );
+
+-- 已经建过表的项目：重新执行下面几行把新栏位补上（新项目会被上面的 create table 直接建好，这几行不会重复出错）
+alter table purchases add column if not exists buyer text;
+alter table purchases add column if not exists is_advance boolean default false;
+alter table purchases add column if not exists repaid boolean default false;
+alter table purchases add column if not exists shop_name text;
+alter table purchases add column if not exists product_link text;
+alter table purchases add column if not exists product_photo text;
 
 create table if not exists orders (
   id text primary key,
