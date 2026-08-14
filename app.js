@@ -98,12 +98,8 @@ function purchaseToRow(p){
     activity_id: p.activityId,
     date: p.date || null,
     supplier: p.supplier || '',
-    item: p.item,
-    qty: p.qty,
-    unit: p.unit || '',
-    unit_price: p.unitPrice,
+    items: p.items || [],
     total_cost: p.totalCost,
-    rmb_unit_price: p.rmbUnitPrice || 0,
     rmb_total: p.rmbTotal || 0,
     note: p.note || '',
     buyer: p.buyer || '',
@@ -116,17 +112,26 @@ function purchaseToRow(p){
   };
 }
 function rowToPurchase(r){
+  // 旧数据是单一货品字段（item/qty/unit/unit_price），没有 items[] 时转换成一项显示，不用另外跑数据迁移
+  let items = Array.isArray(r.items) ? r.items : [];
+  if(items.length===0 && r.item){
+    items = [{
+      name: r.item,
+      qty: Number(r.qty)||0,
+      unit: r.unit || '',
+      unitPrice: Number(r.unit_price)||0,
+      lineTotal: Number(r.total_cost)||0,
+      rmbUnitPrice: Number(r.rmb_unit_price)||0,
+      rmbLineTotal: Number(r.rmb_total)||0
+    }];
+  }
   return {
     id: r.id,
     activityId: r.activity_id,
     date: r.date || '',
     supplier: r.supplier || '',
-    item: r.item,
-    qty: Number(r.qty)||0,
-    unit: r.unit || '',
-    unitPrice: Number(r.unit_price)||0,
+    items,
     totalCost: Number(r.total_cost)||0,
-    rmbUnitPrice: Number(r.rmb_unit_price)||0,
     rmbTotal: Number(r.rmb_total)||0,
     note: r.note || '',
     buyer: r.buyer || '',
@@ -168,6 +173,12 @@ function rowToSettlement(r){
 
 function fmtRmb(n){
   return '¥ ' + (Number(n)||0).toFixed(2);
+}
+
+function purchaseSummaryTitle(p){
+  if(!p.items || p.items.length===0) return p.supplier || '采购记录';
+  if(p.items.length===1) return p.items[0].name;
+  return (p.supplier || '采购记录') + `（${p.items.length}项）`;
 }
 
 function orderToRow(o){
@@ -451,12 +462,102 @@ function renderOverview(){
 }
 
 // ---------- Purchase ----------
-function calcPurchaseTotal(){
-  const qty = Number(document.getElementById('p-qty').value)||0;
-  const price = Number(document.getElementById('p-price').value)||0;
-  document.getElementById('p-total').value = (qty*price).toFixed(2);
-  const priceRmb = Number(document.getElementById('p-price-rmb').value)||0;
-  document.getElementById('p-total-rmb').value = (qty*priceRmb).toFixed(2);
+// ---------- 采购项目（一次采购可以有多样货品，跟下订单的多产品是一样逻辑） ----------
+function addPurchaseItemRow(){
+  const container = document.getElementById('purchase-items-container');
+  const div = document.createElement('div');
+  div.className = 'oi-row';
+  div.innerHTML = `
+    <div class="oi-fields">
+      <div class="oi-field" style="flex:2 1 160px;">
+        <label>货品名称</label>
+        <input type="text" class="pi-name" placeholder="例如：低筋面粉">
+      </div>
+      <div class="oi-field">
+        <label>数量</label>
+        <input type="number" class="pi-qty" value="1" min="0" step="0.01">
+      </div>
+      <div class="oi-field">
+        <label>单位</label>
+        <input type="text" class="pi-unit" placeholder="kg / 包 / 打">
+      </div>
+      <div class="oi-field">
+        <label>单价（RM）</label>
+        <input type="number" class="pi-price" step="0.01">
+      </div>
+      <div class="oi-field">
+        <label>人民币单价（¥，选填）</label>
+        <input type="number" class="pi-price-rmb" step="0.01">
+      </div>
+    </div>
+    <div class="oi-footer">
+      <span>小计：<b class="pi-subtotal">RM 0.00</b> <span class="pi-subtotal-rmb"></span></span>
+      <button type="button" class="btn danger small pi-remove">移除此项</button>
+    </div>
+  `;
+  container.appendChild(div);
+
+  const qtyInput = div.querySelector('.pi-qty');
+  const priceInput = div.querySelector('.pi-price');
+  const priceRmbInput = div.querySelector('.pi-price-rmb');
+  const subtotalEl = div.querySelector('.pi-subtotal');
+  const subtotalRmbEl = div.querySelector('.pi-subtotal-rmb');
+  const removeBtn = div.querySelector('.pi-remove');
+
+  function updateSubtotal(){
+    const q = Number(qtyInput.value)||0;
+    const pr = Number(priceInput.value)||0;
+    const prRmb = Number(priceRmbInput.value)||0;
+    subtotalEl.textContent = fmtMoney(q*pr);
+    subtotalRmbEl.textContent = prRmb>0 ? ('· '+fmtRmb(q*prRmb)) : '';
+    updatePurchaseItemsTotal();
+  }
+  [qtyInput, priceInput, priceRmbInput].forEach(inp=>inp.addEventListener('input', updateSubtotal));
+  removeBtn.addEventListener('click', ()=>{
+    if(container.querySelectorAll('.oi-row').length<=1){ showToast('至少要保留一样货品'); return; }
+    div.remove();
+    updatePurchaseItemsTotal();
+  });
+}
+
+function updatePurchaseItemsTotal(){
+  const rows = document.querySelectorAll('#purchase-items-container .oi-row');
+  let total = 0, totalRmb = 0;
+  rows.forEach(row=>{
+    const q = Number(row.querySelector('.pi-qty').value)||0;
+    const pr = Number(row.querySelector('.pi-price').value)||0;
+    const prRmb = Number(row.querySelector('.pi-price-rmb').value)||0;
+    total += q*pr;
+    totalRmb += q*prRmb;
+  });
+  document.getElementById('purchase-items-total').textContent = fmtMoney(total);
+  document.getElementById('purchase-items-total-rmb').textContent = totalRmb>0 ? ('· '+fmtRmb(totalRmb)) : '';
+}
+
+function resetPurchaseItemRows(){
+  document.getElementById('purchase-items-container').innerHTML = '';
+  addPurchaseItemRow();
+  updatePurchaseItemsTotal();
+}
+
+function collectPurchaseItems(){
+  const rows = document.querySelectorAll('#purchase-items-container .oi-row');
+  const items = [];
+  rows.forEach(row=>{
+    const name = row.querySelector('.pi-name').value.trim();
+    if(!name) return;
+    const qty = Number(row.querySelector('.pi-qty').value)||0;
+    const unit = row.querySelector('.pi-unit').value.trim();
+    const unitPrice = Number(row.querySelector('.pi-price').value)||0;
+    const rmbUnitPrice = Number(row.querySelector('.pi-price-rmb').value)||0;
+    items.push({
+      name, qty, unit, unitPrice,
+      lineTotal: qty*unitPrice,
+      rmbUnitPrice,
+      rmbLineTotal: qty*rmbUnitPrice
+    });
+  });
+  return items;
 }
 
 function toggleRepaidField(){
@@ -470,20 +571,21 @@ function resetPurchaseFormUI(){
 }
 
 function resetPurchaseFormFields(){
-  ['p-item','p-qty','p-unit','p-price','p-total','p-price-rmb','p-total-rmb','p-supplier','p-note','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
+  ['p-supplier','p-note','p-shop-name','p-product-link'].forEach(id=>document.getElementById(id).value='');
   setOtherAwareValue('p-buyer-select','p-buyer-other','');
   document.getElementById('p-product-photo-file').value = '';
   document.getElementById('p-product-pdf-file').value = '';
   document.getElementById('p-is-advance').checked = false;
   document.getElementById('p-repaid').checked = false;
   toggleRepaidField();
+  resetPurchaseItemRows();
 }
 
 async function addPurchase(){
   if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
-  const item = document.getElementById('p-item').value.trim();
-  if(!item){ showToast('请输入原料名称'); return; }
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
+  const items = collectPurchaseItems();
+  if(items.length===0){ showToast('请至少填写一样货品名称'); return; }
   const photoFileInput = document.getElementById('p-product-photo-file');
   const pdfFileInput = document.getElementById('p-product-pdf-file');
   const photoData = (photoFileInput.files && photoFileInput.files[0]) ? await readFileAsDataURL(photoFileInput.files[0]) : undefined;
@@ -494,13 +596,9 @@ async function addPurchase(){
     activityId: selectedActivityId,
     date: document.getElementById('p-date').value || new Date().toISOString().slice(0,10),
     supplier: document.getElementById('p-supplier').value.trim(),
-    item,
-    qty: Number(document.getElementById('p-qty').value)||0,
-    unit: document.getElementById('p-unit').value.trim(),
-    unitPrice: Number(document.getElementById('p-price').value)||0,
-    totalCost: Number(document.getElementById('p-total').value)||0,
-    rmbUnitPrice: Number(document.getElementById('p-price-rmb').value)||0,
-    rmbTotal: Number(document.getElementById('p-total-rmb').value)||0,
+    items,
+    totalCost: items.reduce((s,it)=>s+it.lineTotal,0),
+    rmbTotal: items.reduce((s,it)=>s+it.rmbLineTotal,0),
     note: document.getElementById('p-note').value.trim(),
     buyer: getOtherAwareValue('p-buyer-select','p-buyer-other'),
     isAdvance,
@@ -544,13 +642,6 @@ function editPurchase(id){
 
   document.getElementById('p-date').value = p.date || '';
   document.getElementById('p-supplier').value = p.supplier || '';
-  document.getElementById('p-item').value = p.item || '';
-  document.getElementById('p-qty').value = p.qty || '';
-  document.getElementById('p-unit').value = p.unit || '';
-  document.getElementById('p-price').value = p.unitPrice || '';
-  document.getElementById('p-total').value = p.totalCost || '';
-  document.getElementById('p-price-rmb').value = p.rmbUnitPrice || '';
-  document.getElementById('p-total-rmb').value = p.rmbTotal || '';
   setOtherAwareValue('p-buyer-select','p-buyer-other', p.buyer || '');
   document.getElementById('p-is-advance').checked = !!p.isAdvance;
   document.getElementById('p-repaid').checked = !!p.repaid;
@@ -558,6 +649,21 @@ function editPurchase(id){
   document.getElementById('p-shop-name').value = p.shopName || '';
   document.getElementById('p-product-link').value = p.productLink || '';
   document.getElementById('p-note').value = p.note || '';
+
+  const container = document.getElementById('purchase-items-container');
+  container.innerHTML = '';
+  const items = (p.items && p.items.length) ? p.items : [{}];
+  items.forEach(it=>{
+    addPurchaseItemRow();
+    const row = container.lastElementChild;
+    row.querySelector('.pi-name').value = it.name || '';
+    row.querySelector('.pi-qty').value = it.qty || '';
+    row.querySelector('.pi-unit').value = it.unit || '';
+    row.querySelector('.pi-price').value = it.unitPrice || '';
+    row.querySelector('.pi-price-rmb').value = it.rmbUnitPrice || '';
+    row.querySelector('.pi-qty').dispatchEvent(new Event('input'));
+  });
+  updatePurchaseItemsTotal();
 
   document.getElementById('purchase-save-btn').textContent = '更新采购记录';
   document.getElementById('purchase-cancel-edit-btn').style.display = 'inline-flex';
@@ -733,7 +839,7 @@ function renderSettlementList(){
   box.innerHTML = `<div class="section-title">合并结算记录 <small>多笔采购合并后的真实总额</small></div>` + items.map(s=>{
     const names = s.purchaseIds.map(id=>{
       const p = purchases.find(x=>x.id===id);
-      return p ? p.item : null;
+      return p ? purchaseSummaryTitle(p) : null;
     }).filter(Boolean);
     return `
     <div class="item-card">
@@ -781,16 +887,22 @@ function renderPurchaseList(){
         <div style="display:flex;gap:8px;align-items:flex-start;">
           <input type="checkbox" style="width:auto;margin-top:4px;" ${selectedPurchaseIds.has(p.id)?'checked':''} onchange="togglePurchaseSelect('${p.id}')" title="勾选后可合并记录这几笔单真实的总金额">
           <div>
-            <div class="item-title">${p.item}</div>
+            <div class="item-title">${purchaseSummaryTitle(p)}</div>
             <div class="item-sub">${p.date}${p.supplier ? ' · '+p.supplier : ''}${p.buyer ? ' · 采购人：'+p.buyer : ''}</div>
           </div>
         </div>
         <div class="item-title">${fmtMoney(p.totalCost)}</div>
       </div>
+      <div class="oi-lines">
+        ${(p.items||[]).map(it=>`
+          <div class="oi-line">
+            <span>${it.name} <span class="n">× ${it.qty}${it.unit ? ' '+it.unit : ''}</span></span>
+            <span>${fmtMoney(it.lineTotal)}${it.rmbLineTotal ? ' · '+fmtRmb(it.rmbLineTotal) : ''}</span>
+          </div>
+        `).join('')}
+      </div>
       <div class="item-meta">
-        <span>数量：<b>${p.qty} ${p.unit||''}</b></span>
-        <span>单价：<b>${fmtMoney(p.unitPrice)}</b></span>
-        ${p.rmbTotal ? `<span>人民币：<b>${fmtRmb(p.rmbTotal)}</b>${p.rmbUnitPrice ? '（单价 '+fmtRmb(p.rmbUnitPrice)+'）' : ''}</span>` : ''}
+        ${p.rmbTotal ? `<span>人民币合计：<b>${fmtRmb(p.rmbTotal)}</b></span>` : ''}
         ${settled.has(p.id) ? `<span>📎 已并入合并结算记录（成本按结算的真实总额算，不会重复计算这里的金额）</span>` : ''}
         ${p.isAdvance ? `<span class="badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}
         ${p.shopName ? `<span>商家：${p.shopName}</span>` : ''}
@@ -1680,13 +1792,10 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>switchTab(btn.dataset.tab));
 });
 
-document.getElementById('p-qty').addEventListener('input', calcPurchaseTotal);
-document.getElementById('p-price').addEventListener('input', calcPurchaseTotal);
-document.getElementById('p-price-rmb').addEventListener('input', calcPurchaseTotal);
-
 // default dates
 document.getElementById('p-date').value = new Date().toISOString().slice(0,10);
 document.getElementById('o-orderdate').value = new Date().toISOString().slice(0,10);
 resetOrderItemRows();
+resetPurchaseItemRows();
 
 loadAll();

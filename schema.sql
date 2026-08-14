@@ -25,13 +25,14 @@ create table if not exists purchases (
   activity_id text references activities(id) on delete cascade,
   date date,
   supplier text,
-  item text not null,
+  item text,
   qty numeric default 0,
   unit text,
   unit_price numeric default 0,
   total_cost numeric default 0,
   rmb_unit_price numeric default 0,
   rmb_total numeric default 0,
+  items jsonb default '[]'::jsonb,
   note text,
   buyer text,
   is_advance boolean default false,
@@ -69,6 +70,8 @@ alter table purchases add column if not exists currency text default 'MYR';
 alter table purchases add column if not exists rmb_unit_price numeric default 0;
 alter table purchases add column if not exists rmb_total numeric default 0;
 alter table purchases add column if not exists product_pdf text;
+alter table purchases add column if not exists items jsonb default '[]'::jsonb;
+alter table purchases alter column item drop not null;
 
 create table if not exists orders (
   id text primary key,
