@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>烘焙工作台 · 资料备份</title>
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<style>
+  :root{
+    --cream:#FBF5EC;
+    --paper:#FFFFFF;
+    --espresso:#3B2A20;
+    --espresso-soft:#6B5645;
+    --crust:#B9793F;
+    --crust-dark:#96602E;
+    --border:#E8DCC8;
+    --good:#4C7A4A;
+    --bad:#B04A3F;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--cream);
+    color:var(--espresso);
+    font-family:"PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    padding:22px 20px 14px;
+    border-bottom:1px solid var(--border);
+    background:var(--paper);
+  }
+  header h1{
+    font-family:"Songti SC","STSong","Noto Serif SC",serif;
+    font-size:20px;
+    margin:0;
+  }
+  header p{margin:4px 0 0;font-size:12.5px;color:var(--espresso-soft);}
+  main{max-width:640px;margin:0 auto;padding:18px 14px 60px;}
+  .card{
+    background:var(--paper);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card.notice{background:#FFF7EC;border-color:var(--crust);}
+  .card.notice p{margin:0 0 6px;font-size:12.5px;color:var(--espresso-soft);line-height:1.7;}
+  .card.notice p:last-child{margin-bottom:0;}
+  .section-title{font-size:15px;font-weight:700;margin:0 0 10px;}
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:10px 16px;
+    border-radius:9px;
+    border:none;
+    background:var(--crust);
+    color:#fff;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .btn:hover{background:var(--crust-dark);}
+  .btn.small{padding:7px 12px;font-size:12.5px;border-radius:7px;}
+  .btn.ghost{background:transparent;color:var(--crust-dark);border:1.5px solid var(--crust);}
+  .table-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 0;
+    border-bottom:1px solid var(--border);
+    font-size:13.5px;
+  }
+  .table-row:last-child{border-bottom:none;}
+  .table-row .name{font-weight:600;}
+  .table-row .sub{font-size:11.5px;color:var(--espresso-soft);margin-top:2px;}
+  #log{
+    white-space:pre-wrap;
+    font-size:12px;
+    background:#FBF7F0;
+    border-radius:8px;
+    padding:12px;
+    max-height:320px;
+    overflow:auto;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    color:var(--espresso-soft);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🥮 资料备份</h1>
+  <p>把 Supabase 里的资料导出成 CSV 文件，存到你的电脑</p>
+</header>
+
+<main>
+  <div class="card notice">
+    <p>⚠️ Supabase 免费方案没有自动备份，专案或资料表被误删的话资料就真的救不回来，建议定期在这里备份一次。</p>
+    <p>这个页面只会「读取」资料下载，不会改动 Supabase 里的任何东西，所以不需要登入。</p>
+    <p>有些栏位（例如商品照片、PDF）本身就存了很长的一串文字，导出的 CSV 档案变大是正常的。</p>
+  </div>
+
+  <div class="card">
+    <div class="section-title">一键备份全部</div>
+    <button class="btn" onclick="backupAll()">📦 备份全部 6 张表</button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">或者单独备份一张表</div>
+    <div id="table-list"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">进度日志</div>
+    <div id="log">还没开始。</div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const TABLES = [
+  { key:'activities', label:'活动 activities' },
+  { key:'products', label:'货品清单 products' },
+  { key:'purchases', label:'采购记录 purchases' },
+  { key:'purchase_settlements', label:'合并结算记录 purchase_settlements' },
+  { key:'orders', label:'订单 orders' },
+  { key:'business_profile', label:'商家资料 business_profile' }
+];
+
+const sb = (window.SUPABASE_URL && window.SUPABASE_ANON_KEY)
+  ? window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY)
+  : null;
+
+function log(msg){
+  const el = document.getElementById('log');
+  if(el.textContent === '还没开始。') el.textContent = '';
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+function todayStr(){
+  return new Date().toISOString().slice(0,10);
+}
+
+// 把一批资料转成 CSV 文字：jsonb/数组栏位会转成 JSON 字符串存进那一格
+function toCSV(rows){
+  const headers = Object.keys(rows[0]);
+  function escapeCell(v){
+    if(v === null || v === undefined) return '';
+    if(typeof v === 'object') v = JSON.stringify(v);
+    v = String(v);
+    if(/[",\n]/.test(v)){ v = '"' + v.replace(/"/g,'""') + '"'; }
+    return v;
+  }
+  const lines = [headers.map(escapeCell).join(',')];
+  rows.forEach(r=>{
+    lines.push(headers.map(h=>escapeCell(r[h])).join(','));
+  });
+  return lines.join('\n');
+}
+
+function downloadCSV(filename, csvText){
+  const blob = new Blob(['﻿' + csvText], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+}
+
+async function backupTable(key){
+  if(!sb){ log('❌ 尚未设置 Supabase 连接信息（config.js）'); return false; }
+  const { data, error } = await sb.from(key).select('*');
+  if(error){ log('❌ ['+key+'] 读取失败：'+error.message); return false; }
+  if(!data || data.length===0){ log('⚠️ ['+key+'] 这张表是空的，跳过'); return true; }
+  downloadCSV(key + '_' + todayStr() + '.csv', toCSV(data));
+  log('✅ ['+key+'] 已导出，共 ' + data.length + ' 笔');
+  return true;
+}
+
+async function backupAll(){
+  log('--- 开始备份全部 ' + TABLES.length + ' 张表 ---');
+  for(const t of TABLES){
+    await backupTable(t.key);
+    await new Promise(r=>setTimeout(r, 400)); // 隔开一下，避免浏览器挡住连续下载
+  }
+  log('--- 备份结束，请检查浏览器的下载记录 ---');
+}
+
+function renderTableList(){
+  const box = document.getElementById('table-list');
+  box.innerHTML = TABLES.map(t=>`
+    <div class="table-row">
+      <div>
+        <div class="name">${t.label}</div>
+      </div>
+      <button class="btn small ghost" onclick="backupTable('${t.key}')">导出这张表</button>
+    </div>
+  `).join('');
+}
+renderTableList();
+
+if(!sb){
+  log('⚠️ 尚未设置 Supabase 连接信息，请确认 config.js 已填好 Project URL 和 anon key');
+}
+</script>
+</body>
+</html>
