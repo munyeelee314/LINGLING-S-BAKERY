@@ -1031,10 +1031,41 @@ function renderProductList(){
   `).join('');
 }
 
-function updateProductSuggestions(){
-  const dl = document.getElementById('product-suggestions');
+function buildProductOptionsHTML(){
   const items = products.filter(p=>p.activityId===selectedActivityId);
-  dl.innerHTML = items.map(p=>`<option value="${p.name}">`).join('');
+  return '<option value="">选择产品</option>'
+    + items.map(p=>`<option value="${escapeHTML(p.name)}">${escapeHTML(p.name)}</option>`).join('')
+    + '<option value="OTHER">OTHER（自己输入）</option>';
+}
+
+function getRowProductValue(row){
+  const select = row.querySelector('.oi-product-select');
+  if(select.value==='OTHER') return row.querySelector('.oi-product-other').value.trim();
+  return select.value;
+}
+
+function setRowProductValue(row, productName){
+  const select = row.querySelector('.oi-product-select');
+  const otherInput = row.querySelector('.oi-product-other');
+  const known = Array.from(select.options).map(o=>o.value).filter(v=>v && v!=='OTHER');
+  if(productName && known.includes(productName)){
+    select.value = productName;
+    otherInput.style.display = 'none';
+    otherInput.value = '';
+  } else {
+    select.value = 'OTHER';
+    otherInput.style.display = productName ? 'block' : 'none';
+    otherInput.value = productName || '';
+  }
+}
+
+// 货品清单改了之后，把已经加进订单表单里的每一行产品选单同步更新（保留原本选的值）
+function refreshOrderItemProductOptions(){
+  document.querySelectorAll('#order-items-container .oi-row').forEach(row=>{
+    const currentValue = getRowProductValue(row);
+    row.querySelector('.oi-product-select').innerHTML = buildProductOptionsHTML();
+    setRowProductValue(row, currentValue);
+  });
 }
 
 // ---------- Order item rows (一个订单可有多个产品) ----------
@@ -1049,7 +1080,8 @@ function addOrderItemRow(){
     <div class="oi-fields">
       <div class="oi-field" style="flex:2 1 140px;">
         <label>产品</label>
-        <input type="text" class="oi-product" list="product-suggestions" placeholder="选择或输入产品">
+        <select class="oi-product-select">${buildProductOptionsHTML()}</select>
+        <input type="text" class="oi-product-other" style="display:none;margin-top:8px;" placeholder="输入产品名称">
       </div>
       <div class="oi-field" style="flex:2 1 180px;">
         <label>口味/规格</label>
@@ -1073,7 +1105,8 @@ function addOrderItemRow(){
   `;
   container.appendChild(div);
 
-  const productInput = div.querySelector('.oi-product');
+  const productSelect = div.querySelector('.oi-product-select');
+  const productOther = div.querySelector('.oi-product-other');
   const qtyInput = div.querySelector('.oi-qty');
   const priceInput = div.querySelector('.oi-price');
   const subtotalEl = div.querySelector('.oi-subtotal');
@@ -1085,8 +1118,9 @@ function addOrderItemRow(){
     const pr = Number(priceInput.value)||0;
     subtotalEl.textContent = fmtMoney(q*pr);
   }
-  productInput.addEventListener('input', ()=>{
-    const match = products.find(p=>p.activityId===selectedActivityId && p.name.trim().toLowerCase()===productInput.value.trim().toLowerCase());
+  function handleProductChange(){
+    const value = getRowProductValue(div);
+    const match = products.find(p=>p.activityId===selectedActivityId && p.name.trim().toLowerCase()===value.trim().toLowerCase());
     if(match){
       div.dataset.catalogPrice = match.price;
       if(!priceInput.value){ priceInput.value = match.price.toFixed(2); }
@@ -1103,7 +1137,13 @@ function addOrderItemRow(){
       resetFlavorSimpleInput(flavorContainer);
     }
     updateSubtotal();
+  }
+  productSelect.addEventListener('change', ()=>{
+    productOther.style.display = productSelect.value==='OTHER' ? 'block' : 'none';
+    if(productSelect.value!=='OTHER') productOther.value = '';
+    handleProductChange();
   });
+  productOther.addEventListener('input', handleProductChange);
   qtyInput.addEventListener('input', ()=>{
     updateSubtotal();
     if(div._refreshFlavorTarget) div._refreshFlavorTarget();
@@ -1196,7 +1236,7 @@ async function addOrder(){
   const rows = document.querySelectorAll('#order-items-container .oi-row');
   const items = [];
   rows.forEach(row=>{
-    const product = row.querySelector('.oi-product').value.trim();
+    const product = getRowProductValue(row);
     const qty = Number(row.querySelector('.oi-qty').value)||0;
     const unitPrice = Number(row.querySelector('.oi-price').value)||0;
     const catalogPrice = row.dataset.catalogPrice ? Number(row.dataset.catalogPrice) : null;
@@ -1298,7 +1338,6 @@ function editOrder(id){
   selectedActivityId = o.activityId;
   switchTab('order');
   renderActivityRow('activity-list-order', false);
-  updateProductSuggestions();
 
   document.getElementById('o-name').value = o.customerName || '';
   setOtherAwareValue('o-contact-select','o-contact-other', o.contactPerson || '');
@@ -1317,12 +1356,11 @@ function editOrder(id){
   items.forEach(it=>{
     addOrderItemRow();
     const row = container.lastElementChild;
-    const productInput = row.querySelector('.oi-product');
     const qtyInput = row.querySelector('.oi-qty');
     const priceInput = row.querySelector('.oi-price');
 
-    productInput.value = it.product;
-    productInput.dispatchEvent(new Event('input'));
+    setRowProductValue(row, it.product);
+    row.querySelector('.oi-product-select').dispatchEvent(new Event('change'));
 
     qtyInput.value = it.qty;
     qtyInput.dispatchEvent(new Event('input'));
@@ -1778,7 +1816,7 @@ function renderAll(){
   renderPurchaseList();
   renderProductList();
   renderActivityRow('activity-list-order', false);
-  updateProductSuggestions();
+  refreshOrderItemProductOptions();
   renderOrderList();
   renderStats();
 }
