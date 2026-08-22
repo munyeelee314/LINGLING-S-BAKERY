@@ -1713,26 +1713,17 @@ function printInvoice(orderId){
 function buildOrderFormTicketHTML(items, bizName, logoImage){
   const groups = items.map(p=>{
     const flavors = (p.flavorOptions && p.flavorOptions.length>0) ? p.flavorOptions : [''];
-    const rowCount = flavors.length + 1; // 多留一行给手写额外口味
+    const rowCount = flavors.length;
     const flavorRows = flavors.map((f,idx)=>`
       <tr>
         ${idx===0 ? `<td class="of-size" rowspan="${rowCount}">${escapeHTML(p.name)}</td>` : ''}
         <td class="of-flavor">${escapeHTML(f)}</td>
-        <td class="of-egg"></td>
         ${idx===0 ? `<td class="of-price" rowspan="${rowCount}">RM${(Number(p.price)||0).toFixed(2)}</td>` : ''}
         <td class="of-qty"></td>
         <td class="of-amt"></td>
       </tr>
     `).join('');
-    const blankRow = `
-      <tr>
-        <td class="of-flavor"></td>
-        <td class="of-egg"></td>
-        <td class="of-qty"></td>
-        <td class="of-amt"></td>
-      </tr>
-    `;
-    return flavorRows + blankRow;
+    return flavorRows;
   }).join('');
 
   return `
@@ -1743,7 +1734,7 @@ function buildOrderFormTicketHTML(items, bizName, logoImage){
       </div>
       <table class="of-table">
         <thead>
-          <tr><th>SIZE</th><th>FLAVOUR</th><th>X<br>EGG</th><th>PRICE</th><th>BOX<br>QTY</th><th>TOTAL<br>AMT</th></tr>
+          <tr><th>SIZE</th><th>FLAVOUR</th><th>PRICE</th><th>BOX<br>QTY</th><th>TOTAL<br>AMT</th></tr>
         </thead>
         <tbody>${groups}</tbody>
       </table>
@@ -1762,8 +1753,7 @@ function buildOrderFormTicketHTML(items, bizName, logoImage){
   `;
 }
 
-function buildBlankOrderFormHTML(){
-  const items = products.filter(p=>p.activityId===selectedActivityId);
+function buildBlankOrderFormHTML(items){
   const ticket = buildOrderFormTicketHTML(items, businessProfile.bizName, businessProfile.logoImage);
   const tickets = Array(4).fill(ticket).join('');
   // logo 只在 CSS 里放一份（用 background-image），不要在每张票据的 <img> 里各放一份，不然文件会变得很大
@@ -1771,31 +1761,32 @@ function buildBlankOrderFormHTML(){
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>空白订购表</title>
 <style>
-  @page{ margin:10mm; }
+  @page{ size:A4; margin:8mm; }
   *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   body{font-family:Arial,Helvetica,"PingFang SC","Microsoft YaHei",sans-serif;color:#111;margin:0;padding:10px;}
   .print-btn-wrap{text-align:center;margin-bottom:16px;}
   .print-btn-wrap button{padding:10px 24px;border-radius:9px;border:none;background:#B9793F;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  .order-ticket{border:1.5px solid #000;padding:8px;}
-  .of-header{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
-  .of-logo{width:22px;height:22px;background-size:contain;background-repeat:no-repeat;background-position:center;border-radius:50%;${businessLogoCss}}
-  .of-bizname{font-weight:800;font-style:italic;font-size:14px;letter-spacing:0.5px;}
-  .of-table{width:100%;border-collapse:collapse;font-size:10.5px;}
-  .of-table th, .of-table td{border:1px solid #000;padding:2px 4px;text-align:center;height:16px;}
-  .of-table thead th{font-size:9px;line-height:1.2;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6mm;height:279mm;}
+  .order-ticket{border:1.5px solid #000;padding:4px;overflow:hidden;display:flex;flex-direction:column;}
+  .of-header{display:flex;align-items:center;gap:5px;margin-bottom:3px;flex:none;}
+  .of-logo{width:16px;height:16px;background-size:contain;background-repeat:no-repeat;background-position:center;border-radius:50%;flex:none;${businessLogoCss}}
+  .of-bizname{font-weight:800;font-style:italic;font-size:11px;letter-spacing:0.3px;}
+  .of-table{width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed;}
+  .of-table th, .of-table td{border:1px solid #000;padding:0.5px 2px;text-align:center;}
+  .of-table thead th{font-size:7.5px;line-height:1.15;padding:1px 2px;}
   .of-flavor{text-align:left;}
   .of-size{font-weight:700;}
-  .of-footer-row{display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:11px;}
-  .of-checks label{margin-right:10px;}
-  .of-checks input{margin-right:3px;}
-  .of-total-box{display:inline-block;width:70px;border-bottom:1px solid #000;}
-  .of-field{margin-top:4px;font-size:11px;}
-  .of-line{display:inline-block;width:200px;border-bottom:1px solid #000;}
-  .of-remark{margin-top:6px;border:1px solid #000;min-height:26px;font-size:11px;padding:3px 4px;}
+  .of-footer-row{display:flex;justify-content:space-between;align-items:center;margin-top:3px;font-size:9px;flex:none;}
+  .of-checks label{margin-right:8px;}
+  .of-checks input{margin-right:2px;}
+  .of-total-box{display:inline-block;width:55px;border-bottom:1px solid #000;}
+  .of-field{margin-top:2px;font-size:9px;flex:none;}
+  .of-line{display:inline-block;width:150px;border-bottom:1px solid #000;}
+  .of-remark{margin-top:3px;border:1px solid #000;min-height:14px;font-size:9px;padding:2px 3px;flex:none;}
   @media print{
     body{padding:0;}
     .print-btn-wrap{display:none !important;}
+    .grid{height:auto;}
   }
 </style>
 </head>
@@ -1805,11 +1796,33 @@ function buildBlankOrderFormHTML(){
 </body></html>`;
 }
 
-function printBlankOrderForm(){
+function showPrintFormPicker(){
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
   const items = products.filter(p=>p.activityId===selectedActivityId);
   if(items.length===0){ showToast('这个活动还没有货品，先去建立货品清单'); return; }
-  const html = buildBlankOrderFormHTML();
+  const box = document.getElementById('print-form-picker');
+  box.innerHTML = `
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">选要印上去的货品 <small>不需要的可以取消勾选</small></div>
+      ${items.map(p=>`
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);">
+          <input type="checkbox" class="pf-item-check" value="${p.id}" checked style="width:auto;">
+          ${escapeHTML(p.name)}
+        </label>
+      `).join('')}
+      <div class="btn-row">
+        <button class="btn" onclick="generateBlankOrderForm()">生成并下载</button>
+        <button class="btn ghost" onclick="document.getElementById('print-form-picker').innerHTML=''">取消</button>
+      </div>
+    </div>
+  `;
+}
+
+function generateBlankOrderForm(){
+  const checked = Array.from(document.querySelectorAll('.pf-item-check:checked')).map(c=>c.value);
+  if(checked.length===0){ showToast('请至少勾选一样货品'); return; }
+  const items = products.filter(p=>checked.includes(p.id));
+  const html = buildBlankOrderFormHTML(items);
   try{
     const blob = new Blob([html], {type:'text/html'});
     const url = URL.createObjectURL(blob);
@@ -1820,6 +1833,7 @@ function printBlankOrderForm(){
     a.click();
     document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    document.getElementById('print-form-picker').innerHTML = '';
     showToast('订购表已下载，打开该文件后点里面的打印按钮');
   }catch(e){
     console.error(e);
