@@ -1734,7 +1734,7 @@ function buildOrderFormTicketHTML(items, bizName, logoImage){
   }).join('');
 
   return `
-    <div class="order-ticket">
+    <div class="order-ticket"><div class="of-inner">
       <div class="of-header">
         ${logoImage ? `<div class="of-logo"></div>` : ''}
         <div class="of-bizname">${escapeHTML(bizName || "LINGLING'S BAKERY")}</div>
@@ -1756,7 +1756,7 @@ function buildOrderFormTicketHTML(items, bizName, logoImage){
       <div class="of-field">CONTACT: <span class="of-line"></span></div>
       <div class="of-field">ADDRESS: <span class="of-line"></span></div>
       <div class="of-remark">REMARK:</div>
-    </div>
+    </div></div>
   `;
 }
 
@@ -1774,22 +1774,23 @@ function buildBlankOrderFormHTML(items){
   .print-btn-wrap{text-align:center;margin-bottom:16px;}
   .print-btn-wrap button{padding:10px 24px;border-radius:9px;border:none;background:#B9793F;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
   .grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6mm;height:279mm;}
-  .order-ticket{border:1.5px solid #000;padding:8px;overflow:hidden;display:flex;flex-direction:column;}
-  .of-header{display:flex;align-items:center;gap:6px;margin-bottom:5px;flex:none;}
+  .order-ticket{border:1.5px solid #000;overflow:hidden;position:relative;}
+  .of-inner{padding:8px;transform-origin:top left;}
+  .of-header{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
   .of-logo{width:20px;height:20px;background-size:contain;background-repeat:no-repeat;background-position:center;border-radius:50%;flex:none;${businessLogoCss}}
   .of-bizname{font-weight:800;font-style:italic;font-size:13px;letter-spacing:0.3px;}
-  .of-table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;flex:none;}
-  .of-table th, .of-table td{border:1px solid #000;padding:2px 3px;text-align:center;}
-  .of-table thead th{font-size:8.5px;line-height:1.2;padding:2px 3px;}
+  .of-table{width:100%;border-collapse:collapse;font-size:9.5px;table-layout:fixed;}
+  .of-table th, .of-table td{border:1px solid #000;padding:1.5px 3px;text-align:center;}
+  .of-table thead th{font-size:8px;line-height:1.2;padding:1.5px 3px;}
   .of-flavor{text-align:left;}
   .of-size{font-weight:700;}
-  .of-footer-row{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;flex:none;}
+  .of-footer-row{display:flex;justify-content:space-between;align-items:center;margin-top:5px;font-size:10.5px;}
   .of-checks label{margin-right:10px;}
   .of-checks input{margin-right:3px;}
   .of-total-box{display:inline-block;width:65px;border-bottom:1px solid #000;}
-  .of-field{margin-top:5px;font-size:11px;flex:none;}
+  .of-field{margin-top:4px;font-size:10.5px;}
   .of-line{display:inline-block;width:170px;border-bottom:1px solid #000;}
-  .of-remark{margin-top:6px;border:1px solid #000;min-height:40px;font-size:11px;padding:4px 5px;flex:1;}
+  .of-remark{margin-top:5px;border:1px solid #000;min-height:24px;font-size:10.5px;padding:3px 5px;}
   @media print{
     body{padding:0;}
     .print-btn-wrap{display:none !important;}
@@ -1799,6 +1800,26 @@ function buildBlankOrderFormHTML(items){
 <body>
   <div class="print-btn-wrap"><button onclick="window.print()">🖨 打印 / 保存为 PDF</button></div>
   <div class="grid">${tickets}</div>
+  <script>
+    // 每张票据的内容自动缩放到刚好塞满这一格：内容太多就缩小，内容少留白太多就放大，
+    // 这样不管选了几样货品，4份都能印在同一张 A4 上，也不会有一大截空白。
+    function fitTickets(){
+      document.querySelectorAll('.order-ticket').forEach(function(ticket){
+        var inner = ticket.querySelector('.of-inner');
+        inner.style.transform = 'scale(1)';
+        inner.style.width = '100%';
+        var boxH = ticket.clientHeight, boxW = ticket.clientWidth;
+        var naturalH = inner.scrollHeight, naturalW = inner.scrollWidth;
+        var scale = Math.min(boxH / naturalH, boxW / naturalW, 1.6);
+        scale = Math.max(scale, 0.4);
+        inner.style.transform = 'scale(' + scale + ')';
+        inner.style.width = (100 / scale) + '%';
+      });
+    }
+    window.addEventListener('load', fitTickets);
+    window.addEventListener('beforeprint', fitTickets);
+    window.addEventListener('resize', fitTickets);
+  </script>
 </body></html>`;
 }
 
