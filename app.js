@@ -1720,16 +1720,14 @@ function buildOrderFormTicketHTML(items, bizName, logoImage){
         <td class="of-flavor">${escapeHTML(f)}</td>
         <td class="of-egg"></td>
         ${idx===0 ? `<td class="of-price" rowspan="${rowCount}">RM${(Number(p.price)||0).toFixed(2)}</td>` : ''}
-        <td class="of-qty"></td>
-        <td class="of-amt"></td>
+        ${idx===0 ? `<td class="of-qty" rowspan="${rowCount}"></td>` : ''}
+        ${idx===0 ? `<td class="of-amt" rowspan="${rowCount}"></td>` : ''}
       </tr>
     `).join('');
     const blankRow = `
       <tr>
         <td class="of-flavor"></td>
         <td class="of-egg"></td>
-        <td class="of-qty"></td>
-        <td class="of-amt"></td>
       </tr>
     `;
     return flavorRows + blankRow;
