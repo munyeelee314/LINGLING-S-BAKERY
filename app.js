@@ -1709,6 +1709,124 @@ function printInvoice(orderId){
   }
 }
 
+// ---------- 空白订购表（拿去手写接单用的打印模板） ----------
+function buildOrderFormTicketHTML(items, bizName, logoImage){
+  const groups = items.map(p=>{
+    const flavors = (p.flavorOptions && p.flavorOptions.length>0) ? p.flavorOptions : [''];
+    const rowCount = flavors.length + 1; // 多留一行给手写额外口味
+    const flavorRows = flavors.map((f,idx)=>`
+      <tr>
+        ${idx===0 ? `<td class="of-size" rowspan="${rowCount}">${escapeHTML(p.name)}</td>` : ''}
+        <td class="of-flavor">${escapeHTML(f)}</td>
+        <td class="of-egg"></td>
+        ${idx===0 ? `<td class="of-price" rowspan="${rowCount}">RM${(Number(p.price)||0).toFixed(2)}</td>` : ''}
+        <td class="of-qty"></td>
+        <td class="of-amt"></td>
+      </tr>
+    `).join('');
+    const blankRow = `
+      <tr>
+        <td class="of-flavor"></td>
+        <td class="of-egg"></td>
+        <td class="of-qty"></td>
+        <td class="of-amt"></td>
+      </tr>
+    `;
+    return flavorRows + blankRow;
+  }).join('');
+
+  return `
+    <div class="order-ticket">
+      <div class="of-header">
+        ${logoImage ? `<div class="of-logo"></div>` : ''}
+        <div class="of-bizname">${escapeHTML(bizName || "LINGLING'S BAKERY")}</div>
+      </div>
+      <table class="of-table">
+        <thead>
+          <tr><th>SIZE</th><th>FLAVOUR</th><th>X<br>EGG</th><th>PRICE</th><th>BOX<br>QTY</th><th>TOTAL<br>AMT</th></tr>
+        </thead>
+        <tbody>${groups}</tbody>
+      </table>
+      <div class="of-footer-row">
+        <div class="of-checks">
+          <label><input type="checkbox" disabled> 面交</label>
+          <label><input type="checkbox" disabled> OTHER</label>
+        </div>
+        <div class="of-total">TOTAL= <span class="of-total-box"></span></div>
+      </div>
+      <div class="of-field">CUS NAME: <span class="of-line"></span></div>
+      <div class="of-field">CONTACT: <span class="of-line"></span></div>
+      <div class="of-field">ADDRESS: <span class="of-line"></span></div>
+      <div class="of-remark">REMARK:</div>
+    </div>
+  `;
+}
+
+function buildBlankOrderFormHTML(){
+  const items = products.filter(p=>p.activityId===selectedActivityId);
+  const ticket = buildOrderFormTicketHTML(items, businessProfile.bizName, businessProfile.logoImage);
+  const tickets = Array(4).fill(ticket).join('');
+  // logo 只在 CSS 里放一份（用 background-image），不要在每张票据的 <img> 里各放一份，不然文件会变得很大
+  const businessLogoCss = businessProfile.logoImage ? `background-image:url('${businessProfile.logoImage}');` : '';
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>空白订购表</title>
+<style>
+  @page{ margin:10mm; }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-family:Arial,Helvetica,"PingFang SC","Microsoft YaHei",sans-serif;color:#111;margin:0;padding:10px;}
+  .print-btn-wrap{text-align:center;margin-bottom:16px;}
+  .print-btn-wrap button{padding:10px 24px;border-radius:9px;border:none;background:#B9793F;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .order-ticket{border:1.5px solid #000;padding:8px;}
+  .of-header{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+  .of-logo{width:22px;height:22px;background-size:contain;background-repeat:no-repeat;background-position:center;border-radius:50%;${businessLogoCss}}
+  .of-bizname{font-weight:800;font-style:italic;font-size:14px;letter-spacing:0.5px;}
+  .of-table{width:100%;border-collapse:collapse;font-size:10.5px;}
+  .of-table th, .of-table td{border:1px solid #000;padding:2px 4px;text-align:center;height:16px;}
+  .of-table thead th{font-size:9px;line-height:1.2;}
+  .of-flavor{text-align:left;}
+  .of-size{font-weight:700;}
+  .of-footer-row{display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:11px;}
+  .of-checks label{margin-right:10px;}
+  .of-checks input{margin-right:3px;}
+  .of-total-box{display:inline-block;width:70px;border-bottom:1px solid #000;}
+  .of-field{margin-top:4px;font-size:11px;}
+  .of-line{display:inline-block;width:200px;border-bottom:1px solid #000;}
+  .of-remark{margin-top:6px;border:1px solid #000;min-height:26px;font-size:11px;padding:3px 4px;}
+  @media print{
+    body{padding:0;}
+    .print-btn-wrap{display:none !important;}
+  }
+</style>
+</head>
+<body>
+  <div class="print-btn-wrap"><button onclick="window.print()">🖨 打印 / 保存为 PDF</button></div>
+  <div class="grid">${tickets}</div>
+</body></html>`;
+}
+
+function printBlankOrderForm(){
+  if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
+  const items = products.filter(p=>p.activityId===selectedActivityId);
+  if(items.length===0){ showToast('这个活动还没有货品，先去建立货品清单'); return; }
+  const html = buildBlankOrderFormHTML();
+  try{
+    const blob = new Blob([html], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `空白订购表_${activityName(selectedActivityId).replace(/[^\w一-龥]/g,'')}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    showToast('订购表已下载，打开该文件后点里面的打印按钮');
+  }catch(e){
+    console.error(e);
+    showToast('下载失败，请稍后再试');
+  }
+}
+
 function renderContactFilterOptions(){
   const sel = document.getElementById('order-contact-filter');
   const current = sel.value;
