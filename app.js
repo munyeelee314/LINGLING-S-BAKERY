@@ -1713,17 +1713,26 @@ function printInvoice(orderId){
 function buildOrderFormTicketHTML(items, bizName, logoImage){
   const groups = items.map(p=>{
     const flavors = (p.flavorOptions && p.flavorOptions.length>0) ? p.flavorOptions : [''];
-    const rowCount = flavors.length;
+    const rowCount = flavors.length + 1; // 多留一行给手写额外口味
     const flavorRows = flavors.map((f,idx)=>`
       <tr>
         ${idx===0 ? `<td class="of-size" rowspan="${rowCount}">${escapeHTML(p.name)}</td>` : ''}
         <td class="of-flavor">${escapeHTML(f)}</td>
+        <td class="of-egg"></td>
         ${idx===0 ? `<td class="of-price" rowspan="${rowCount}">RM${(Number(p.price)||0).toFixed(2)}</td>` : ''}
         <td class="of-qty"></td>
         <td class="of-amt"></td>
       </tr>
     `).join('');
-    return flavorRows;
+    const blankRow = `
+      <tr>
+        <td class="of-flavor"></td>
+        <td class="of-egg"></td>
+        <td class="of-qty"></td>
+        <td class="of-amt"></td>
+      </tr>
+    `;
+    return flavorRows + blankRow;
   }).join('');
 
   return `
@@ -1734,7 +1743,7 @@ function buildOrderFormTicketHTML(items, bizName, logoImage){
       </div>
       <table class="of-table">
         <thead>
-          <tr><th>SIZE</th><th>FLAVOUR</th><th>PRICE</th><th>BOX<br>QTY</th><th>TOTAL<br>AMT</th></tr>
+          <tr><th>SIZE</th><th>FLAVOUR</th><th>X<br>EGG</th><th>PRICE</th><th>BOX<br>QTY</th><th>TOTAL<br>AMT</th></tr>
         </thead>
         <tbody>${groups}</tbody>
       </table>
