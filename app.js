@@ -1805,20 +1805,35 @@ function buildBlankOrderFormHTML(items){
 </body></html>`;
 }
 
+let printFormOrder = [];
+let printFormChecked = new Set();
+
 function showPrintFormPicker(){
   if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
   const items = products.filter(p=>p.activityId===selectedActivityId);
   if(items.length===0){ showToast('这个活动还没有货品，先去建立货品清单'); return; }
+  printFormOrder = items.map(p=>p.id);
+  printFormChecked = new Set(printFormOrder);
+  renderPrintFormPicker();
+}
+
+function renderPrintFormPicker(){
   const box = document.getElementById('print-form-picker');
   box.innerHTML = `
     <div class="card">
-      <div class="section-title" style="margin-top:0;">选要印上去的货品 <small>不需要的可以取消勾选</small></div>
-      ${items.map(p=>`
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);">
-          <input type="checkbox" class="pf-item-check" value="${p.id}" checked style="width:auto;">
-          ${escapeHTML(p.name)}
-        </label>
-      `).join('')}
+      <div class="section-title" style="margin-top:0;">选要印上去的货品 <small>不需要的可以取消勾选，用 ↑↓ 调整排列顺序</small></div>
+      ${printFormOrder.map((id,idx)=>{
+        const p = products.find(x=>x.id===id);
+        if(!p) return '';
+        return `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);">
+          <input type="checkbox" class="pf-item-check" data-id="${id}" ${printFormChecked.has(id)?'checked':''} onchange="togglePrintFormCheck('${id}', this.checked)" style="width:auto;">
+          <span style="flex:1;">${escapeHTML(p.name)}</span>
+          <button type="button" class="btn ghost small" ${idx===0?'disabled':''} onclick="movePrintFormItem('${id}', -1)">↑</button>
+          <button type="button" class="btn ghost small" ${idx===printFormOrder.length-1?'disabled':''} onclick="movePrintFormItem('${id}', 1)">↓</button>
+        </div>
+      `;
+      }).join('')}
       <div class="btn-row">
         <button class="btn" onclick="generateBlankOrderForm()">生成并下载</button>
         <button class="btn ghost" onclick="document.getElementById('print-form-picker').innerHTML=''">取消</button>
@@ -1827,10 +1842,22 @@ function showPrintFormPicker(){
   `;
 }
 
+function togglePrintFormCheck(id, checked){
+  if(checked) printFormChecked.add(id);
+  else printFormChecked.delete(id);
+}
+
+function movePrintFormItem(id, delta){
+  const idx = printFormOrder.indexOf(id);
+  const newIdx = idx + delta;
+  if(newIdx<0 || newIdx>=printFormOrder.length) return;
+  [printFormOrder[idx], printFormOrder[newIdx]] = [printFormOrder[newIdx], printFormOrder[idx]];
+  renderPrintFormPicker();
+}
+
 function generateBlankOrderForm(){
-  const checked = Array.from(document.querySelectorAll('.pf-item-check:checked')).map(c=>c.value);
-  if(checked.length===0){ showToast('请至少勾选一样货品'); return; }
-  const items = products.filter(p=>checked.includes(p.id));
+  if(printFormChecked.size===0){ showToast('请至少勾选一样货品'); return; }
+  const items = printFormOrder.filter(id=>printFormChecked.has(id)).map(id=>products.find(p=>p.id===id)).filter(Boolean);
   const html = buildBlankOrderFormHTML(items);
   try{
     const blob = new Blob([html], {type:'text/html'});
