@@ -8,6 +8,7 @@ let editingOrderId = null;
 let editingProductId = null;
 let editingPurchaseId = null;
 let selectedActivityId = 'all'; // shared selection concept across tabs, 'all' or activity id or 'none'
+let hasLoadedOnce = false;
 let selectedPurchaseIds = new Set(); // for grouping multiple purchase lines into one repayment settlement
 
 const colorMap = {cny:'var(--cny)', midautumn:'var(--midautumn)', generic:'var(--generic)'};
@@ -291,9 +292,21 @@ async function loadAll(){
     if(error){ console.error(error); showToast('初始化默认活动失败'); }
     else activities = [defaultActivity];
   }
-  // 默认显示最近创建的活动，避免把所有活动的数据混在一起看
-  selectedActivityId = activities.length ? activities[activities.length-1].id : 'all';
+  if(!hasLoadedOnce){
+    // 第一次打开：默认显示最近创建的活动，避免把所有活动的数据混在一起看
+    selectedActivityId = activities.length ? activities[activities.length-1].id : 'all';
+    hasLoadedOnce = true;
+  } else if(selectedActivityId!=='all' && !activities.some(a=>a.id===selectedActivityId)){
+    // 手动刷新时保留原本选的活动；只有那个活动已经不存在了才改选别的
+    selectedActivityId = activities.length ? activities[activities.length-1].id : 'all';
+  }
   renderAll();
+}
+
+async function refreshData(){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
+  await loadAll();
+  showToast('已刷新最新资料');
 }
 
 // ---------- Business Profile (for invoice printing) ----------

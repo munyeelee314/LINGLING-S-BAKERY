@@ -353,9 +353,12 @@
 </head>
 <body>
 
-<header>
-  <h1>🥮 烘焙工作台</h1>
-  <p>采购成本 · 订单管理 · 付款确认 · 数据统计</p>
+<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+  <div>
+    <h1>🥮 烘焙工作台</h1>
+    <p>采购成本 · 订单管理 · 付款确认 · 数据统计</p>
+  </div>
+  <button class="btn ghost small" style="flex:none;" onclick="refreshData()">🔄 刷新</button>
 </header>
 
 <div id="config-warning" style="display:none;background:#FBEAE8;color:#B04A3F;padding:10px 16px;font-size:13px;text-align:center;">
