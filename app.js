@@ -207,6 +207,7 @@ function rowToOrder(r){
     id: r.id,
     activityId: r.activity_id,
     invoiceNo: r.invoice_no,
+    invoiceSeq: r.invoice_seq || null,
     customerName: r.customer_name,
     contactPerson: r.contact_person || '',
     phone: r.phone || '',
@@ -1322,14 +1323,13 @@ async function addOrder(){
 
   const rec = {
     id: uid(),
-    invoiceNo: 'INV' + String(orders.length+1).padStart(4,'0'),
     ...commonFields,
     paymentStatus: 'unpaid',
     paidAmount: 0
   };
-  const {error} = await sb.from('orders').insert(orderToRow(rec));
+  const {data: inserted, error} = await sb.from('orders').insert(orderToRow(rec)).select().single();
   if(error){ console.error(error); showToast('保存订单失败：'+error.message); return; }
-  orders.push(rec);
+  orders.push(rowToOrder(inserted));
   ['o-name','o-phone','o-note','o-address','o-delivertime'].forEach(id=>document.getElementById(id).value='');
   setOtherAwareValue('o-contact-select','o-contact-other','');
   document.getElementById('o-delivery-method').value = 'pickup';
@@ -1434,7 +1434,7 @@ function orderCardHTML(o, showActions){
     <div class="item-card">
       <div class="item-top">
         <div>
-          <div class="item-title">${o.customerName}</div>
+          <div class="item-title">${o.customerName} <small style="font-weight:400;color:var(--espresso-soft);">${getInvoiceNo(o)}</small></div>
           <div class="item-sub">${activityName(o.activityId)} · 下单 ${o.orderDate}${o.deliverDate ? ' · 交货 '+o.deliverDate+(o.deliverTime ? ' '+o.deliverTime : '') : ''}${o.contactPerson ? ' · 对接人：'+o.contactPerson : ''} · ${o.deliveryMethod==='delivery' ? '🚗 送货' : '🏪 自取'}</div>
         </div>
         <span class="badge ${statusClass}">${statusLabel}</span>
@@ -1500,6 +1500,7 @@ async function deleteOrder(id){
 
 // ---------- Invoice printing ----------
 function getInvoiceNo(o){
+  if(o.invoiceSeq) return 'INV' + String(o.invoiceSeq).padStart(4,'0');
   return o.invoiceNo || ('INV' + o.id.slice(-4).toUpperCase());
 }
 

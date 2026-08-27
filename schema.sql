@@ -73,10 +73,13 @@ alter table purchases add column if not exists product_pdf text;
 alter table purchases add column if not exists items jsonb default '[]'::jsonb;
 alter table purchases alter column item drop not null;
 
+create sequence if not exists orders_invoice_seq;
+
 create table if not exists orders (
   id text primary key,
   activity_id text references activities(id) on delete cascade,
   invoice_no text,
+  invoice_seq integer default nextval('orders_invoice_seq'),
   customer_name text not null,
   contact_person text,
   phone text,
@@ -92,6 +95,10 @@ create table if not exists orders (
   paid_amount numeric default 0,
   created_at timestamptz default now()
 );
+
+-- 已经建过表的项目：跑这两行补上流水号栏位（发票号码用数据库的 sequence 生成，
+-- 不管删单还是多台设备同时新建订单都不会撞号，比之前用"目前订单数量+1"可靠）
+alter table orders add column if not exists invoice_seq integer default nextval('orders_invoice_seq');
 
 create table if not exists business_profile (
   id integer primary key default 1,
