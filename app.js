@@ -1941,6 +1941,63 @@ function renderOrderList(){
   list.innerHTML = items.map(o=>orderCardHTML(o,true)).join('');
 }
 
+// ---------- 交货日历 ----------
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth(); // 0-11
+
+function changeCalendarMonth(delta){
+  calendarMonth += delta;
+  if(calendarMonth < 0){ calendarMonth = 11; calendarYear--; }
+  else if(calendarMonth > 11){ calendarMonth = 0; calendarYear++; }
+  renderCalendar();
+}
+
+function jumpToOrderFromCalendar(id){
+  switchTab('order');
+  editOrder(id);
+}
+
+function renderCalendar(){
+  const grid = document.getElementById('calendar-grid');
+  if(!grid) return;
+  renderActivityRow('activity-list-calendar', true);
+  document.getElementById('calendar-month-label').textContent = calendarYear + ' 年 ' + (calendarMonth+1) + ' 月';
+
+  const byDate = {};
+  filteredOrders().forEach(o=>{
+    if(!o.deliverDate) return;
+    if(!byDate[o.deliverDate]) byDate[o.deliverDate] = [];
+    byDate[o.deliverDate].push(o);
+  });
+
+  const firstOfMonth = new Date(calendarYear, calendarMonth, 1);
+  const startWeekday = (firstOfMonth.getDay() + 6) % 7; // 周一=0
+  const daysInMonth = new Date(calendarYear, calendarMonth+1, 0).getDate();
+  const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
+  const todayStr2 = new Date().toISOString().slice(0,10);
+
+  let html = ['一','二','三','四','五','六','日'].map(d=>'<div class="cal-head">周'+d+'</div>').join('');
+  for(let i=0;i<totalCells;i++){
+    const dayNum = i - startWeekday + 1;
+    if(dayNum < 1 || dayNum > daysInMonth){
+      html += '<div class="cal-cell cal-cell-empty"></div>';
+      continue;
+    }
+    const dateStr = calendarYear + '-' + String(calendarMonth+1).padStart(2,'0') + '-' + String(dayNum).padStart(2,'0');
+    const dayOrders = (byDate[dateStr]||[]).sort((a,b)=>(a.deliverTime||'').localeCompare(b.deliverTime||''));
+    const shown = dayOrders.slice(0,4);
+    const chips = shown.map(o=>{
+      const cls = o.paymentStatus==='paid' ? 'paid' : (o.paymentStatus==='deposit' ? 'deposit' : 'unpaid');
+      const label = (o.deliverTime ? o.deliverTime+' ' : '') + o.customerName;
+      return '<div class="cal-chip '+cls+'" onclick="jumpToOrderFromCalendar(\''+o.id+'\')" title="'+escapeHTML(label)+'">'+escapeHTML(label)+'</div>';
+    }).join('');
+    const more = dayOrders.length>4 ? '<div class="cal-more">+'+(dayOrders.length-4)+' 项</div>' : '';
+    const isToday = dateStr===todayStr2 ? ' today' : '';
+    html += '<div class="cal-cell"><div class="cal-date'+isToday+'">'+dayNum+'</div>'+chips+more+'</div>';
+  }
+  grid.innerHTML = html;
+}
+
 // ---------- Stats ----------
 function renderStats(){
   renderActivityRow('activity-list-stats', true);
@@ -2017,6 +2074,7 @@ function renderAll(){
   renderActivityRow('activity-list-order', false);
   refreshOrderItemProductOptions();
   renderOrderList();
+  renderCalendar();
   renderStats();
 }
 
