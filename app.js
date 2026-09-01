@@ -1917,9 +1917,7 @@ function renderContactFilterOptions(){
   if(contacts.includes(current)) sel.value = current;
 }
 
-function renderOrderList(){
-  renderActivityRow('activity-list-orderlist', true);
-  renderContactFilterOptions();
+function getFilteredOrderListItems(){
   const search = (document.getElementById('order-search').value||'').toLowerCase();
   const statusFilter = document.getElementById('order-status-filter').value;
   const contactFilter = document.getElementById('order-contact-filter').value;
@@ -1933,6 +1931,13 @@ function renderOrderList(){
   if(contactFilter){
     items = items.filter(o => o.contactPerson === contactFilter);
   }
+  return items;
+}
+
+function renderOrderList(){
+  renderActivityRow('activity-list-orderlist', true);
+  renderContactFilterOptions();
+  let items = getFilteredOrderListItems();
   items = items.sort((a,b)=> new Date(b.orderDate)-new Date(a.orderDate));
   const list = document.getElementById('orderlist-list');
   if(items.length===0){
@@ -1940,6 +1945,88 @@ function renderOrderList(){
     return;
   }
   list.innerHTML = items.map(o=>orderCardHTML(o,true)).join('');
+}
+
+// ---------- 打印订单清单（给妈妈对单用，一张单一行，怕漏单可以逐个打勾） ----------
+function buildOrderChecklistHTML(orders){
+  const withDate = orders.filter(o=>o.deliverDate).sort((a,b)=> new Date(a.deliverDate) - new Date(b.deliverDate));
+  const withoutDate = orders.filter(o=>!o.deliverDate);
+  const all = withDate.concat(withoutDate);
+
+  const groups = all.map(o=>{
+    const items = getOrderItems(o);
+    const itemLines = items.map(it=>
+      '<div class="ck-item">' + escapeHTML(it.product) + (it.flavor ? ' ' + escapeHTML(it.flavor) : '') + ' <b>× ' + it.qty + '盒</b></div>'
+    ).join('');
+    let dateLabel = '⚠️ 未填交货日期';
+    if(o.deliverDate){
+      const parts = o.deliverDate.split('-');
+      dateLabel = parts[2] + '/' + parts[1] + (o.deliverTime ? ' ' + o.deliverTime : '');
+    }
+    return `
+      <div class="ck-group">
+        <div class="ck-header">
+          <span class="ck-box">☐</span>
+          <b>${escapeHTML(o.customerName)}</b>
+          <span class="ck-date">${dateLabel}</span>
+          <span class="ck-method">${o.deliveryMethod==='delivery' ? '🚗 送货' : '🏪 自取'}</span>
+        </div>
+        <div class="ck-items">${itemLines}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>订单清单</title>
+<style>
+  @page{ margin:12mm; }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-family:Arial,Helvetica,"PingFang SC","Microsoft YaHei",sans-serif;color:#111;margin:0;padding:14px;font-size:13px;}
+  .print-btn-wrap{text-align:center;margin-bottom:16px;}
+  .print-btn-wrap button{padding:10px 24px;border-radius:9px;border:none;background:#B9793F;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
+  h1{font-size:16px;margin:0 0 4px;}
+  .meta{font-size:11.5px;color:#666;margin-bottom:14px;}
+  .ck-group{border-bottom:1px solid #ddd;padding:8px 0;}
+  .ck-header{display:flex;align-items:center;gap:8px;font-size:14px;}
+  .ck-box{font-size:16px;}
+  .ck-date{color:#B9793F;font-weight:700;margin-left:auto;}
+  .ck-method{font-size:11.5px;color:#777;}
+  .ck-items{margin-top:4px;padding-left:26px;color:#333;}
+  .ck-item{padding:1px 0;}
+  @media print{
+    body{padding:0;}
+    .print-btn-wrap{display:none !important;}
+    .ck-group{break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+  <div class="print-btn-wrap"><button onclick="window.print()">🖨 打印 / 保存为 PDF</button></div>
+  <h1>订单清单</h1>
+  <div class="meta">共 ${all.length} 张订单 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
+  ${groups}
+</body></html>`;
+}
+
+function printOrderChecklist(){
+  const items = getFilteredOrderListItems();
+  if(items.length===0){ showToast('没有符合条件的订单可以打印'); return; }
+  const html = buildOrderChecklistHTML(items);
+  try{
+    const blob = new Blob([html], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '订单清单_' + new Date().toISOString().slice(0,10) + '.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    showToast('订单清单已下载，打开该文件后点里面的打印按钮');
+  }catch(e){
+    console.error(e);
+    showToast('下载失败，请稍后再试');
+  }
 }
 
 // ---------- 交货日历 ----------

@@ -682,7 +682,10 @@
 
   <!-- 订单记录 -->
   <div class="panel" id="panel-orderlist">
-    <div class="section-title">选择活动</div>
+    <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      选择活动
+      <button class="btn ghost small" onclick="printOrderChecklist()">🖨 打印订单清单</button>
+    </div>
     <div class="activity-row" id="activity-list-orderlist"></div>
     <div class="filter-row">
       <input type="text" id="order-search" placeholder="搜索客户名 / 产品" oninput="renderOrderList()">
