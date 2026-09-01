@@ -1434,7 +1434,7 @@ function orderCardHTML(o, showActions){
     <div class="item-card">
       <div class="item-top">
         <div>
-          <div class="item-title">${o.customerName} <small style="font-weight:400;color:var(--espresso-soft);">${getInvoiceNo(o)}</small></div>
+          <div class="item-title">${o.customerName} <small style="font-weight:400;color:var(--espresso-soft);">${getInvoiceNo(o)}${o.deliverDate ? ' · 交货 '+o.deliverDate : ''}</small></div>
           <div class="item-sub">${activityName(o.activityId)} · 下单 ${o.orderDate}${o.deliverDate ? ' · 交货 '+o.deliverDate+(o.deliverTime ? ' '+o.deliverTime : '') : ''}${o.contactPerson ? ' · 对接人：'+o.contactPerson : ''} · ${o.deliveryMethod==='delivery' ? '🚗 送货' : '🏪 自取'}</div>
         </div>
         <span class="badge ${statusClass}">${statusLabel}</span>
