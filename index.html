@@ -362,6 +362,21 @@
     flex-wrap:wrap;
   }
   .pay-row input{max-width:110px;}
+  .rp-entries{
+    margin-top:8px;
+    padding:8px 10px;
+    background:#FBF7F0;
+    border-radius:8px;
+  }
+  .rp-entry{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:12.5px;
+    padding:3px 0;
+    color:var(--espresso-soft);
+  }
+  .rp-entry:not(:last-child){border-bottom:1px dashed var(--border);}
 
   .flavor-breakdown{
     border:1px dashed var(--border);
@@ -611,6 +626,7 @@
     <div class="section-title">采购记录</div>
     <div id="purchase-list"></div>
     <div id="settlement-list"></div>
+    <div id="buyer-repayment-summary"></div>
   </div>
 
   <!-- 下订单 -->

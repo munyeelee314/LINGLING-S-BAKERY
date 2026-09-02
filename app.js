@@ -1,6 +1,7 @@
 let activities = [];
 let purchases = [];
 let settlements = [];
+let buyerRepayments = [];
 let orders = [];
 let products = [];
 let businessProfile = {};
@@ -172,6 +173,27 @@ function rowToSettlement(r){
   };
 }
 
+function buyerRepaymentToRow(r){
+  return {
+    id: r.id,
+    activity_id: r.activityId || null,
+    buyer: r.buyer,
+    amount: r.amount || 0,
+    date: r.date || null,
+    note: r.note || ''
+  };
+}
+function rowToBuyerRepayment(r){
+  return {
+    id: r.id,
+    activityId: r.activity_id || null,
+    buyer: r.buyer,
+    amount: Number(r.amount)||0,
+    date: r.date || '',
+    note: r.note || ''
+  };
+}
+
 function fmtRmb(n){
   return '¥ ' + (Number(n)||0).toFixed(2);
 }
@@ -279,6 +301,16 @@ async function loadAll(){
     settlements = (ps.data||[]).map(rowToSettlement);
     orders = (o.data||[]).map(rowToOrder);
     businessProfile = rowToBusinessProfile(bp.data);
+
+    // buyer_repayments 是新表，旧项目可能还没跑迁移，读取失败也不要挡住其他资料显示
+    try{
+      const br = await sb.from('buyer_repayments').select('*').order('created_at');
+      if(br.error) throw br.error;
+      buyerRepayments = (br.data||[]).map(rowToBuyerRepayment);
+    }catch(e2){
+      console.error(e2);
+      buyerRepayments = [];
+    }
   }catch(e){
     console.error(e);
     showToast('读取数据失败，请检查网络或 Supabase 设置');
@@ -744,6 +776,102 @@ function purchaseCostTotal(purs, sttls){
   return lineTotal + settlementTotal;
 }
 
+// ---------- 代付总览：谁先垫钱、总共代付多少、已还多少、还欠多少 ----------
+function filteredBuyerRepayments(){
+  if(selectedActivityId==='all') return buyerRepayments;
+  return buyerRepayments.filter(r=>r.activityId===selectedActivityId);
+}
+
+function buyerOwedMap(){
+  const settled = settledPurchaseIds();
+  const map = {};
+  filteredPurchases().forEach(p=>{
+    if(!p.isAdvance || !p.buyer || settled.has(p.id)) return;
+    map[p.buyer] = (map[p.buyer]||0) + Number(p.totalCost||0);
+  });
+  filteredSettlements().forEach(s=>{
+    if(!s.needsRepay || !s.buyer) return;
+    map[s.buyer] = (map[s.buyer]||0) + Number(s.myrAmount||0);
+  });
+  return map;
+}
+
+function renderBuyerRepaymentSummary(){
+  const box = document.getElementById('buyer-repayment-summary');
+  if(!box) return;
+  if(selectedActivityId==='all'){ box.innerHTML = ''; return; }
+  const owedMap = buyerOwedMap();
+  const repaidByBuyer = {};
+  filteredBuyerRepayments().forEach(r=>{
+    (repaidByBuyer[r.buyer] = repaidByBuyer[r.buyer]||[]).push(r);
+  });
+  const buyers = [...new Set([...Object.keys(owedMap), ...Object.keys(repaidByBuyer)])];
+  if(buyers.length===0){ box.innerHTML = ''; return; }
+
+  box.innerHTML = `<div class="section-title">代付总览 <small>谁先垫钱、总共代付多少、已还多少、还欠多少</small></div>` +
+    buyers.map(name=>{
+      const owed = owedMap[name]||0;
+      const entries = (repaidByBuyer[name]||[]).sort((a,b)=> new Date(b.date)-new Date(a.date));
+      const repaid = entries.reduce((s,r)=>s+Number(r.amount||0),0);
+      const balance = owed - repaid;
+      const entriesHTML = entries.map(r=>`
+        <div class="rp-entry">
+          <span>${r.date||''}${r.note ? ' · '+escapeHTML(r.note) : ''}</span>
+          <span>${fmtMoney(r.amount)}<button class="btn danger small" style="margin-left:8px;" onclick="deleteBuyerRepayment('${r.id}')">删除</button></span>
+        </div>
+      `).join('');
+      return `
+        <div class="item-card" data-buyer="${escapeHTML(name)}">
+          <div class="item-top">
+            <div class="item-title">${escapeHTML(name)}</div>
+            <div class="item-title" style="color:${balance>0.005 ? 'var(--bad)' : 'var(--good)'}">余额 ${fmtMoney(balance)}</div>
+          </div>
+          <div class="item-meta">
+            <span>总共代付：<b>${fmtMoney(owed)}</b></span>
+            <span>已还：<b>${fmtMoney(repaid)}</b></span>
+          </div>
+          ${entriesHTML ? `<div class="rp-entries">${entriesHTML}</div>` : ''}
+          <div class="pay-row" style="margin-top:8px;">
+            <input type="number" step="0.01" class="rp-amt-input" placeholder="这次还了多少">
+            <input type="text" class="rp-note-input" placeholder="备注（选填）">
+            <button class="btn small ghost" onclick="addBuyerRepayment(this)">记录还款</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+}
+
+async function addBuyerRepayment(btn){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
+  const card = btn.closest('.item-card');
+  const buyer = card.dataset.buyer;
+  const amtInput = card.querySelector('.rp-amt-input');
+  const noteInput = card.querySelector('.rp-note-input');
+  const amount = Number(amtInput.value)||0;
+  if(amount<=0){ showToast('请填写这次还款的金额'); return; }
+  const rec = {
+    id: uid(),
+    activityId: selectedActivityId==='all' ? null : selectedActivityId,
+    buyer,
+    amount,
+    date: new Date().toISOString().slice(0,10),
+    note: noteInput.value.trim()
+  };
+  const {error} = await sb.from('buyer_repayments').insert(buyerRepaymentToRow(rec));
+  if(error){ console.error(error); showToast('记录还款失败：'+error.message); return; }
+  buyerRepayments.push(rec);
+  renderAll();
+  showToast('已记录还款');
+}
+
+async function deleteBuyerRepayment(id){
+  if(!sb){ showToast('请先设置 Supabase 连接信息'); return; }
+  const {error} = await sb.from('buyer_repayments').delete().eq('id', id);
+  if(error){ console.error(error); showToast('删除失败：'+error.message); return; }
+  buyerRepayments = buyerRepayments.filter(r=>r.id!==id);
+  renderAll();
+}
+
 function toggleSettleRepaidField(){
   const needsRepay = document.getElementById('settle-needs-repay').checked;
   document.getElementById('settle-repaid-wrapper').style.display = needsRepay ? 'block' : 'none';
@@ -886,12 +1014,14 @@ function renderPurchaseList(){
     list.innerHTML = '<div class="empty">请选择一个活动来查看和添加采购记录</div>';
     renderSettlementBuilder();
     renderSettlementList();
+    renderBuyerRepaymentSummary();
     return;
   }
   if(items.length===0){
     list.innerHTML = '<div class="empty">这个活动还没有采购记录</div>';
     renderSettlementBuilder();
     renderSettlementList();
+    renderBuyerRepaymentSummary();
     return;
   }
   const settled = settledPurchaseIds();
@@ -934,6 +1064,7 @@ function renderPurchaseList(){
   `).join('');
   renderSettlementBuilder();
   renderSettlementList();
+  renderBuyerRepaymentSummary();
 }
 
 // ---------- Products ----------

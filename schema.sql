@@ -59,6 +59,23 @@ create table if not exists purchase_settlements (
 
 alter table purchase_settlements add column if not exists needs_repay boolean default false;
 
+-- 代付还款记录：谁先垫钱、每次还了多少（不用跟哪一笔采购/结算对上，纯粹是这个人总共欠多少、还了多少的流水账）
+create table if not exists buyer_repayments (
+  id text primary key,
+  activity_id text references activities(id) on delete cascade,
+  buyer text not null,
+  amount numeric not null default 0,
+  date date,
+  note text,
+  created_at timestamptz default now()
+);
+
+alter table buyer_repayments enable row level security;
+create policy "public read" on buyer_repayments for select using (true);
+create policy "public insert" on buyer_repayments for insert with check (true);
+create policy "public update" on buyer_repayments for update using (true);
+create policy "public delete" on buyer_repayments for delete using (true);
+
 -- 已经建过表的项目：重新执行下面几行把新栏位补上（新项目会被上面的 create table 直接建好，这几行不会重复出错）
 alter table purchases add column if not exists buyer text;
 alter table purchases add column if not exists is_advance boolean default false;
