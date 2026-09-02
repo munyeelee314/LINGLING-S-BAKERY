@@ -1960,7 +1960,9 @@ function buildOrderChecklistHTML(orders){
   function renderOrderBlock(o){
     const items = getOrderItems(o);
     const itemLines = items.map(it=>
-      '<div class="ck-item">' + escapeHTML(it.product) + (it.flavor ? ' ' + escapeHTML(it.flavor) : '') + ' <b>× ' + it.qty + '盒</b></div>'
+      '<div class="ck-item">' + escapeHTML(it.product) + (it.flavor ? ' ' + escapeHTML(it.flavor) : '') +
+      ' <span class="ck-price">' + fmtMoney(it.unitPrice) + '</span> × ' + it.qty + '盒' +
+      ' <b class="ck-linetotal">' + fmtMoney(it.lineTotal) + '</b></div>'
     ).join('');
     return `
       <div class="ck-order">
@@ -1970,6 +1972,7 @@ function buildOrderChecklistHTML(orders){
           <span class="ck-method">${o.deliveryMethod==='delivery' ? '🚗 送货' : '🏪 自取'}</span>
         </div>
         <div class="ck-items">${itemLines}</div>
+        <div class="ck-order-total">订单总额：<b>${fmtMoney(o.totalPrice)}</b></div>
       </div>
     `;
   }
@@ -2003,7 +2006,8 @@ function buildOrderChecklistHTML(orders){
       ${withoutDate.map(o=>`
         <div class="ck-order">
           <div class="ck-order-head"><span class="ck-box">☐</span><b>${escapeHTML(o.customerName)}</b></div>
-          <div class="ck-items">${getOrderItems(o).map(it=>'<div class="ck-item">'+escapeHTML(it.product)+(it.flavor?' '+escapeHTML(it.flavor):'')+' <b>× '+it.qty+'盒</b></div>').join('')}</div>
+          <div class="ck-items">${getOrderItems(o).map(it=>'<div class="ck-item">'+escapeHTML(it.product)+(it.flavor?' '+escapeHTML(it.flavor):'')+' <span class="ck-price">'+fmtMoney(it.unitPrice)+'</span> × '+it.qty+'盒 <b class="ck-linetotal">'+fmtMoney(it.lineTotal)+'</b></div>').join('')}</div>
+          <div class="ck-order-total">订单总额：<b>${fmtMoney(o.totalPrice)}</b></div>
         </div>
       `).join('')}
     </div>
@@ -2030,6 +2034,10 @@ function buildOrderChecklistHTML(orders){
   .ck-method{font-size:11.5px;color:#777;}
   .ck-items{margin-top:3px;padding-left:24px;color:#333;}
   .ck-item{padding:1px 0;}
+  .ck-price{color:#777;}
+  .ck-linetotal{margin-left:6px;}
+  .ck-order-total{padding-left:24px;margin-top:2px;font-size:12px;color:#555;}
+  .grand-total{font-size:13.5px;font-weight:700;margin-top:6px;}
   @media print{
     body{padding:0;}
     .print-btn-wrap{display:none !important;}
@@ -2041,6 +2049,7 @@ function buildOrderChecklistHTML(orders){
   <div class="print-btn-wrap"><button onclick="window.print()">🖨 打印 / 保存为 PDF</button></div>
   <h1>订单清单</h1>
   <div class="meta">共 ${orders.length} 张订单 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
+  <div class="grand-total">总金额：${fmtMoney(orders.reduce((s,o)=>s+Number(o.totalPrice||0),0))}</div>
   ${namedGroups}
   ${noDateGroup}
 </body></html>`;
