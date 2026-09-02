@@ -1949,32 +1949,65 @@ function renderOrderList(){
 
 // ---------- 打印订单清单（给妈妈对单用，一张单一行，怕漏单可以逐个打勾） ----------
 function buildOrderChecklistHTML(orders){
-  const withDate = orders.filter(o=>o.deliverDate).sort((a,b)=> new Date(a.deliverDate) - new Date(b.deliverDate));
+  const withDate = orders.filter(o=>o.deliverDate);
   const withoutDate = orders.filter(o=>!o.deliverDate);
-  const all = withDate.concat(withoutDate);
 
-  const groups = all.map(o=>{
+  function dateLabelOf(o){
+    if(!o.deliverDate) return '⚠️ 未填交货日期';
+    const parts = o.deliverDate.split('-');
+    return parts[2] + '/' + parts[1] + (o.deliverTime ? ' ' + o.deliverTime : '');
+  }
+  function renderOrderBlock(o){
     const items = getOrderItems(o);
     const itemLines = items.map(it=>
       '<div class="ck-item">' + escapeHTML(it.product) + (it.flavor ? ' ' + escapeHTML(it.flavor) : '') + ' <b>× ' + it.qty + '盒</b></div>'
     ).join('');
-    let dateLabel = '⚠️ 未填交货日期';
-    if(o.deliverDate){
-      const parts = o.deliverDate.split('-');
-      dateLabel = parts[2] + '/' + parts[1] + (o.deliverTime ? ' ' + o.deliverTime : '');
-    }
     return `
-      <div class="ck-group">
-        <div class="ck-header">
+      <div class="ck-order">
+        <div class="ck-order-head">
           <span class="ck-box">☐</span>
-          <b>${escapeHTML(o.customerName)}</b>
-          <span class="ck-date">${dateLabel}</span>
+          <span class="ck-date">${dateLabelOf(o)}</span>
           <span class="ck-method">${o.deliveryMethod==='delivery' ? '🚗 送货' : '🏪 自取'}</span>
         </div>
         <div class="ck-items">${itemLines}</div>
       </div>
     `;
+  }
+
+  // 同一个客户的所有订单放在一起，不会东一个西一个；组之间照这个客户最早的交货日期排序
+  const byName = {};
+  const nameOrder = [];
+  withDate.forEach(o=>{
+    if(!byName[o.customerName]){ byName[o.customerName] = []; nameOrder.push(o.customerName); }
+    byName[o.customerName].push(o);
+  });
+  nameOrder.sort((a,b)=>{
+    const da = Math.min.apply(null, byName[a].map(o=>new Date(o.deliverDate).getTime()));
+    const db = Math.min.apply(null, byName[b].map(o=>new Date(o.deliverDate).getTime()));
+    return da-db;
+  });
+
+  const namedGroups = nameOrder.map(name=>{
+    const list = byName[name].sort((a,b)=> new Date(a.deliverDate)-new Date(b.deliverDate));
+    return `
+      <div class="ck-group">
+        <div class="ck-name">${escapeHTML(name)}${list.length>1 ? ' <span class="ck-count">（'+list.length+' 张单）</span>' : ''}</div>
+        ${list.map(renderOrderBlock).join('')}
+      </div>
+    `;
   }).join('');
+
+  const noDateGroup = withoutDate.length===0 ? '' : `
+    <div class="ck-group">
+      <div class="ck-name">⚠️ 未填交货日期</div>
+      ${withoutDate.map(o=>`
+        <div class="ck-order">
+          <div class="ck-order-head"><span class="ck-box">☐</span><b>${escapeHTML(o.customerName)}</b></div>
+          <div class="ck-items">${getOrderItems(o).map(it=>'<div class="ck-item">'+escapeHTML(it.product)+(it.flavor?' '+escapeHTML(it.flavor):'')+' <b>× '+it.qty+'盒</b></div>').join('')}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>订单清单</title>
@@ -1986,12 +2019,16 @@ function buildOrderChecklistHTML(orders){
   .print-btn-wrap button{padding:10px 24px;border-radius:9px;border:none;background:#B9793F;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
   h1{font-size:16px;margin:0 0 4px;}
   .meta{font-size:11.5px;color:#666;margin-bottom:14px;}
-  .ck-group{border-bottom:1px solid #ddd;padding:8px 0;}
-  .ck-header{display:flex;align-items:center;gap:8px;font-size:14px;}
-  .ck-box{font-size:16px;}
+  .ck-group{border-bottom:2px solid #999;padding:8px 0;}
+  .ck-name{font-size:14.5px;font-weight:800;margin-bottom:4px;}
+  .ck-count{font-weight:400;color:#888;font-size:11.5px;}
+  .ck-order{border-top:1px dashed #ddd;padding:5px 0;}
+  .ck-order:first-of-type{border-top:none;}
+  .ck-order-head{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .ck-box{font-size:15px;}
   .ck-date{color:#B9793F;font-weight:700;margin-left:auto;}
   .ck-method{font-size:11.5px;color:#777;}
-  .ck-items{margin-top:4px;padding-left:26px;color:#333;}
+  .ck-items{margin-top:3px;padding-left:24px;color:#333;}
   .ck-item{padding:1px 0;}
   @media print{
     body{padding:0;}
@@ -2003,8 +2040,9 @@ function buildOrderChecklistHTML(orders){
 <body>
   <div class="print-btn-wrap"><button onclick="window.print()">🖨 打印 / 保存为 PDF</button></div>
   <h1>订单清单</h1>
-  <div class="meta">共 ${all.length} 张订单 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
-  ${groups}
+  <div class="meta">共 ${orders.length} 张订单 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
+  ${namedGroups}
+  ${noDateGroup}
 </body></html>`;
 }
 
