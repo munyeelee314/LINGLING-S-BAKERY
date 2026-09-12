@@ -700,7 +700,10 @@
   <div class="panel" id="panel-orderlist">
     <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       选择活动
-      <button class="btn ghost small" onclick="printOrderChecklist()">🖨 打印订单清单</button>
+      <span style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn ghost small" onclick="printOrderChecklist()">🖨 打印订单清单</button>
+        <button class="btn ghost small" onclick="printAllInvoices()">🖨 打印全部发票</button>
+      </span>
     </div>
     <div class="activity-row" id="activity-list-orderlist"></div>
     <div class="filter-row">

@@ -1640,7 +1640,80 @@ function escapeHTML(s){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function buildInvoiceHTML(o){
+function invoiceStyles(){
+  // logo/QR 图片只在 CSS 里放一份（background-image），一次打印多张发票时才不会每张都重复一份大图，文件大小跟发票张数无关
+  const logoCss = businessProfile.logoImage ? `background-image:url('${businessProfile.logoImage}');background-size:contain;background-repeat:no-repeat;background-position:center;` : '';
+  const qrCss = businessProfile.qrImage ? `background-image:url('${businessProfile.qrImage}');background-size:contain;background-repeat:no-repeat;background-position:center;` : '';
+  return `
+  @page{ margin:16mm; }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+  body{font-family:Arial,Helvetica,"PingFang SC","Microsoft YaHei",sans-serif;color:#222;margin:0;padding:0;font-size:13px;}
+  .sheet{max-width:700px;margin:0 auto;padding:10px;}
+  .bottom-block{margin-top:55px;}
+  .biz-header{display:flex;align-items:center;gap:12px;}
+  .biz-logo{width:78px;height:78px;flex-shrink:0;${logoCss}}
+  .biz-name{font-family:Georgia,"Songti SC","STSong",serif;font-size:26px;font-weight:700;letter-spacing:0.5px;}
+  .biz-sub{font-size:15.5px;color:#555;margin-top:3px;}
+  .divider{border-top:2px solid #222;margin:14px 0;}
+  .invoice-title{font-family:Georgia,"Songti SC","STSong",serif;font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:10px;}
+  .info-cols{display:flex;justify-content:space-between;gap:24px;margin-bottom:14px;}
+  .info-block{flex:1;}
+  .info-block-title{font-family:Georgia,"Songti SC","STSong",serif;font-size:11px;font-weight:700;letter-spacing:1px;color:#555;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:6px;}
+  .info-row{display:flex;font-size:12.5px;padding:2px 0;}
+  .info-row .k{width:130px;color:#666;flex-shrink:0;}
+  .info-row .k::after{content:":";margin-left:1px;}
+  .info-row .v{font-weight:600;}
+  table{width:100%;border-collapse:collapse;margin-top:6px;}
+  thead th{font-size:10.5px;letter-spacing:0.5px;color:#555;text-align:left;border-bottom:1.5px solid #222;padding:6px 4px;}
+  thead th.num{text-align:right;}
+  tbody td{padding:8px 4px;border-bottom:1px solid #e5e5e5;font-size:13px;vertical-align:top;}
+  td.num{text-align:right;white-space:nowrap;}
+  .it-name{font-family:Georgia,"Songti SC","STSong",serif;font-weight:600;}
+  .it-sub{font-size:11px;color:#777;}
+  .it-sub.discount{color:#b9781f;font-weight:700;}
+  .orig-price{text-decoration:line-through;color:#999;font-size:11px;}
+  .total-row{display:flex;justify-content:flex-end;align-items:center;gap:14px;margin-top:0;}
+  .total-label{font-family:Georgia,"Songti SC","STSong",serif;font-size:13px;color:#555;}
+  .total-amount{font-size:20px;font-weight:700;}
+  .stamp{display:inline-block;margin-top:8px;padding:5px 14px;border:2px solid;border-radius:6px;font-weight:700;font-size:13px;float:right;}
+  .stamp.paid{color:#2e7d32;border-color:#2e7d32;}
+  .stamp.deposit{color:#b9781f;border-color:#b9781f;}
+  .stamp.unpaid{color:#b04a3f;border-color:#b04a3f;}
+  .order-note{margin-top:6px;font-size:10.5px;color:#888;font-style:italic;}
+  .terms{margin-top:0;font-size:11px;color:#555;}
+  .terms .t-title{font-family:Georgia,"Songti SC","STSong",serif;font-weight:700;font-size:11.5px;color:#333;margin-bottom:4px;}
+  .tear-divider{border-top:1.5px dashed #bbb;margin-top:20px;margin-bottom:12px;}
+  .terms ul{margin:0;padding-left:16px;}
+  .pay-details{position:relative;min-height:130px;margin-top:16px;background:#F5F1E8;border:1px solid #E5DFD0;border-radius:10px;padding:12px 130px 14px 16px;}
+  .pay-title{font-family:Georgia,"Songti SC","STSong",serif;font-size:10.5px;letter-spacing:1px;color:#777;}
+  .pay-info{margin-top:8px;}
+  .qr-box{position:absolute;top:12px;right:16px;text-align:center;}
+  .qr-img{width:88px;height:88px;border-radius:4px;${qrCss}}
+  .qr-label{font-size:10px;color:#777;margin-top:2px;}
+  .footer-note{text-align:center;font-size:10.5px;color:#999;margin-top:24px;}
+  .print-btn-wrap{text-align:center;margin-bottom:18px;}
+  .print-btn-wrap button{
+    padding:11px 26px;
+    border-radius:9px;
+    border:none;
+    background:#B9793F;
+    color:#fff;
+    font-size:14.5px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .sheet-page + .sheet-page{ margin-top:30px; border-top:2px dashed #ccc; padding-top:30px; }
+  @media print{
+    body{padding:0;}
+    .print-btn-wrap{display:none !important;}
+    .sheet-page{ page-break-after:always; }
+    .sheet-page:last-child{ page-break-after:auto; }
+    .sheet-page + .sheet-page{ margin-top:0; border-top:none; padding-top:0; }
+  }
+  `;
+}
+
+function buildInvoiceSheetHTML(o){
   const items = getOrderItems(o);
   const itemsRows = items.map(it=>{
     const hasDiscount = it.originalPrice && it.originalPrice > it.unitPrice;
@@ -1688,7 +1761,7 @@ function buildInvoiceHTML(o){
 
   const bankHTML = (businessProfile.bankName || businessProfile.bankAccountNumber) ? `
     <div class="pay-details">
-      ${businessProfile.qrImage ? `<div class="qr-box"><img src="${businessProfile.qrImage}"><div class="qr-label">Scan to pay</div></div>` : ''}
+      ${businessProfile.qrImage ? `<div class="qr-box"><div class="qr-img"></div><div class="qr-label">Scan to pay</div></div>` : ''}
       <div class="pay-title">PAYMENT DETAILS</div>
       <div class="pay-info">
         ${businessProfile.bankName ? `<div class="info-row"><span class="k">Bank</span><span class="v">${escapeHTML(businessProfile.bankName)}</span></div>` : ''}
@@ -1700,79 +1773,10 @@ function buildInvoiceHTML(o){
 
   const today = new Date().toISOString().slice(0,10);
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Invoice ${getInvoiceNo(o)}</title>
-<style>
-  @page{ margin:16mm; }
-  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-  body{font-family:Arial,Helvetica,"PingFang SC","Microsoft YaHei",sans-serif;color:#222;margin:0;padding:0;font-size:13px;}
-  .sheet{max-width:700px;margin:0 auto;padding:10px;}
-  .bottom-block{margin-top:55px;}
-  .biz-header{display:flex;align-items:center;gap:12px;}
-  .biz-logo{width:78px;height:78px;object-fit:contain;flex-shrink:0;}
-  .biz-name{font-family:Georgia,"Songti SC","STSong",serif;font-size:26px;font-weight:700;letter-spacing:0.5px;}
-  .biz-sub{font-size:15.5px;color:#555;margin-top:3px;}
-  .divider{border-top:2px solid #222;margin:14px 0;}
-  .invoice-title{font-family:Georgia,"Songti SC","STSong",serif;font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:10px;}
-  .info-cols{display:flex;justify-content:space-between;gap:24px;margin-bottom:14px;}
-  .info-block{flex:1;}
-  .info-block-title{font-family:Georgia,"Songti SC","STSong",serif;font-size:11px;font-weight:700;letter-spacing:1px;color:#555;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:6px;}
-  .info-row{display:flex;font-size:12.5px;padding:2px 0;}
-  .info-row .k{width:130px;color:#666;flex-shrink:0;}
-  .info-row .k::after{content:":";margin-left:1px;}
-  .info-row .v{font-weight:600;}
-  table{width:100%;border-collapse:collapse;margin-top:6px;}
-  thead th{font-size:10.5px;letter-spacing:0.5px;color:#555;text-align:left;border-bottom:1.5px solid #222;padding:6px 4px;}
-  thead th.num{text-align:right;}
-  tbody td{padding:8px 4px;border-bottom:1px solid #e5e5e5;font-size:13px;vertical-align:top;}
-  td.num{text-align:right;white-space:nowrap;}
-  .it-name{font-family:Georgia,"Songti SC","STSong",serif;font-weight:600;}
-  .it-sub{font-size:11px;color:#777;}
-  .it-sub.discount{color:#b9781f;font-weight:700;}
-  .orig-price{text-decoration:line-through;color:#999;font-size:11px;}
-  .total-row{display:flex;justify-content:flex-end;align-items:center;gap:14px;margin-top:0;}
-  .total-label{font-family:Georgia,"Songti SC","STSong",serif;font-size:13px;color:#555;}
-  .total-amount{font-size:20px;font-weight:700;}
-  .stamp{display:inline-block;margin-top:8px;padding:5px 14px;border:2px solid;border-radius:6px;font-weight:700;font-size:13px;float:right;}
-  .stamp.paid{color:#2e7d32;border-color:#2e7d32;}
-  .stamp.deposit{color:#b9781f;border-color:#b9781f;}
-  .stamp.unpaid{color:#b04a3f;border-color:#b04a3f;}
-  .order-note{margin-top:6px;font-size:10.5px;color:#888;font-style:italic;}
-  .terms{margin-top:0;font-size:11px;color:#555;}
-  .terms .t-title{font-family:Georgia,"Songti SC","STSong",serif;font-weight:700;font-size:11.5px;color:#333;margin-bottom:4px;}
-  .tear-divider{border-top:1.5px dashed #bbb;margin-top:20px;margin-bottom:12px;}
-  .terms ul{margin:0;padding-left:16px;}
-  .pay-details{position:relative;min-height:130px;margin-top:16px;background:#F5F1E8;border:1px solid #E5DFD0;border-radius:10px;padding:12px 130px 14px 16px;}
-  .pay-title{font-family:Georgia,"Songti SC","STSong",serif;font-size:10.5px;letter-spacing:1px;color:#777;}
-  .pay-info{margin-top:8px;}
-  .qr-box{position:absolute;top:12px;right:16px;text-align:center;}
-  .qr-box img{width:88px;height:88px;object-fit:contain;border-radius:4px;display:block;}
-  .qr-label{font-size:10px;color:#777;margin-top:2px;}
-  .footer-note{text-align:center;font-size:10.5px;color:#999;margin-top:24px;}
-  .print-btn-wrap{text-align:center;margin-bottom:18px;}
-  .print-btn-wrap button{
-    padding:11px 26px;
-    border-radius:9px;
-    border:none;
-    background:#B9793F;
-    color:#fff;
-    font-size:14.5px;
-    font-weight:700;
-    cursor:pointer;
-  }
-  @media print{
-    body{padding:0;}
-    .print-btn-wrap{display:none !important;}
-  }
-</style>
-</head>
-<body>
-  <div class="print-btn-wrap">
-    <button onclick="window.print()">🖨 打印 / 保存为 PDF</button>
-  </div>
-  <div class="sheet">
+  return `
+  <div class="sheet-page"><div class="sheet">
     <div class="biz-header">
-      ${businessProfile.logoImage ? `<img class="biz-logo" src="${businessProfile.logoImage}">` : ''}
+      ${businessProfile.logoImage ? `<div class="biz-logo"></div>` : ''}
       <div>
         <div class="biz-name">${escapeHTML(businessProfile.bizName || '（请到"商家资料"页填写店名）')}</div>
         <div class="biz-sub">
@@ -1829,8 +1833,55 @@ function buildInvoiceHTML(o){
 
       <div class="footer-note">Printed on ${today}</div>
     </div>
+  </div></div>`;
+}
+
+function buildInvoiceHTML(o){
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Invoice ${getInvoiceNo(o)}</title>
+<style>${invoiceStyles()}</style>
+</head>
+<body>
+  <div class="print-btn-wrap">
+    <button onclick="window.print()">🖨 打印 / 保存为 PDF</button>
   </div>
+  ${buildInvoiceSheetHTML(o)}
 </body></html>`;
+}
+
+function buildAllInvoicesHTML(orders){
+  const sheets = orders.map(buildInvoiceSheetHTML).join('');
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>全部发票</title>
+<style>${invoiceStyles()}</style>
+</head>
+<body>
+  <div class="print-btn-wrap">
+    <button onclick="window.print()">🖨 打印全部 / 保存为 PDF</button>
+  </div>
+  ${sheets}
+</body></html>`;
+}
+
+function printAllInvoices(){
+  const items = getFilteredOrderListItems();
+  if(items.length===0){ showToast('没有符合条件的订单可以打印'); return; }
+  const html = buildAllInvoicesHTML(items);
+  try{
+    const blob = new Blob([html], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '全部发票_' + new Date().toISOString().slice(0,10) + '.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    showToast('全部发票已下载，打开该文件后点里面的打印按钮（共 ' + items.length + ' 张）');
+  }catch(e){
+    console.error(e);
+    showToast('下载失败，请稍后再试');
+  }
 }
 
 function printInvoice(orderId){
