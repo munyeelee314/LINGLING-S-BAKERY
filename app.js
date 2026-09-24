@@ -2246,8 +2246,7 @@ function checklistStyles(){
 }
 
 function buildPurchaseChecklistHTML(purs){
-  const sorted = [...purs].sort((a,b)=> new Date(a.date) - new Date(b.date));
-  const groups = sorted.map(p=>{
+  function renderPurchaseBlock(p){
     const itemLines = (p.items||[]).map(it=>
       '<div class="ck-item">' + escapeHTML(it.name) + (it.unit ? ' '+escapeHTML(it.unit) : '') +
       ' <span class="ck-price">' + fmtMoney(it.unitPrice) + (it.rmbUnitPrice ? ' / '+fmtRmb(it.rmbUnitPrice) : '') + '</span> × ' + it.qty +
@@ -2255,18 +2254,44 @@ function buildPurchaseChecklistHTML(purs){
     ).join('');
     const subParts = [];
     if(p.supplier) subParts.push('供应商：'+escapeHTML(p.supplier));
-    if(p.buyer) subParts.push('采购人：'+escapeHTML(p.buyer));
     if(p.shopName) subParts.push('商家：'+escapeHTML(p.shopName));
     return `
-      <div class="ck-group">
+      <div class="ck-order">
         <div class="ck-order-head">
           <span class="ck-box">☐</span>
           <b>${escapeHTML(purchaseSummaryTitle(p))}</b>
           <span class="ck-date">${p.date||''}</span>
         </div>
-        ${subParts.length ? `<div class="ck-sub">${subParts.join(' · ')}${p.isAdvance ? `<span class="ck-badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}</div>` : (p.isAdvance ? `<div class="ck-sub"><span class="ck-badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span></div>` : '')}
+        ${subParts.length || p.isAdvance ? `<div class="ck-sub">${subParts.join(' · ')}${p.isAdvance ? `<span class="ck-badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}</div>` : ''}
         <div class="ck-items">${itemLines}</div>
         <div class="ck-order-total">总计：<b>${fmtMoney(p.totalCost)}</b>${p.rmbTotal ? ' · '+fmtRmb(p.rmbTotal) : ''}</div>
+      </div>
+    `;
+  }
+
+  // 按采购人（代付人）分组，每个人一页；没填采购人的放最后
+  const NO_BUYER = '⚠️ 未填采购人';
+  const byBuyer = {};
+  const buyerOrder = [];
+  purs.forEach(p=>{
+    const key = p.buyer || NO_BUYER;
+    if(!byBuyer[key]){ byBuyer[key] = []; buyerOrder.push(key); }
+    byBuyer[key].push(p);
+  });
+  buyerOrder.sort((a,b)=>{
+    if(a===NO_BUYER) return 1;
+    if(b===NO_BUYER) return -1;
+    return a.localeCompare(b);
+  });
+
+  const buyerSections = buyerOrder.map((buyer, idx)=>{
+    const list = byBuyer[buyer].sort((a,b)=> new Date(a.date)-new Date(b.date));
+    const subtotal = list.reduce((s,p)=>s+Number(p.totalCost||0),0);
+    const subtotalRmb = list.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
+    return `
+      <div class="ck-buyer-section"${idx>0 ? ' style="page-break-before:always;"' : ''}>
+        <div class="ck-name">${escapeHTML(buyer)} <span class="ck-count">（${list.length} 笔 · ${fmtMoney(subtotal)}${subtotalRmb ? ' · '+fmtRmb(subtotalRmb) : ''}）</span></div>
+        ${list.map(renderPurchaseBlock).join('')}
       </div>
     `;
   }).join('');
@@ -2283,7 +2308,7 @@ function buildPurchaseChecklistHTML(purs){
   <h1>采购清单</h1>
   <div class="meta">共 ${purs.length} 笔采购 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
   <div class="grand-total">总金额：${fmtMoney(grandTotal)}${grandTotalRmb ? ' · 人民币参考 '+fmtRmb(grandTotalRmb) : ''}</div>
-  ${groups}
+  ${buyerSections}
 </body></html>`;
 }
 
