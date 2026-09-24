@@ -2197,7 +2197,20 @@ function buildOrderChecklistHTML(orders){
 
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>订单清单</title>
-<style>
+<style>${checklistStyles()}</style>
+</head>
+<body>
+  <div class="print-btn-wrap"><button onclick="window.print()">🖨 打印 / 保存为 PDF</button></div>
+  <h1>订单清单</h1>
+  <div class="meta">共 ${orders.length} 张订单 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
+  <div class="grand-total">总金额：${fmtMoney(orders.reduce((s,o)=>s+Number(o.totalPrice||0),0))}</div>
+  ${namedGroups}
+  ${noDateGroup}
+</body></html>`;
+}
+
+function checklistStyles(){
+  return `
   @page{ margin:12mm; }
   *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   body{font-family:Arial,Helvetica,"PingFang SC","Microsoft YaHei",sans-serif;color:#111;margin:0;padding:14px;font-size:13px;}
@@ -2208,6 +2221,7 @@ function buildOrderChecklistHTML(orders){
   .ck-group{border-bottom:2px solid #999;padding:8px 0;}
   .ck-name{font-size:14.5px;font-weight:800;margin-bottom:4px;}
   .ck-count{font-weight:400;color:#888;font-size:11.5px;}
+  .ck-sub{font-size:11.5px;color:#777;padding-left:24px;margin-top:-2px;margin-bottom:2px;}
   .ck-order{border-top:1px dashed #ddd;padding:5px 0;}
   .ck-order:first-of-type{border-top:none;}
   .ck-order-head{display:flex;align-items:center;gap:8px;font-size:13px;}
@@ -2220,21 +2234,79 @@ function buildOrderChecklistHTML(orders){
   .ck-linetotal{margin-left:6px;}
   .ck-order-total{padding-left:24px;margin-top:2px;font-size:12px;color:#555;}
   .grand-total{font-size:13.5px;font-weight:700;margin-top:6px;}
+  .ck-badge{font-size:10.5px;padding:2px 7px;border-radius:100px;margin-left:6px;}
+  .ck-badge.unpaid{background:#FBEAE8;color:#B04A3F;}
+  .ck-badge.paid{background:#EAF3EA;color:#4C7A4A;}
   @media print{
     body{padding:0;}
     .print-btn-wrap{display:none !important;}
     .ck-group{break-inside:avoid;}
   }
-</style>
+  `;
+}
+
+function buildPurchaseChecklistHTML(purs){
+  const sorted = [...purs].sort((a,b)=> new Date(a.date) - new Date(b.date));
+  const groups = sorted.map(p=>{
+    const itemLines = (p.items||[]).map(it=>
+      '<div class="ck-item">' + escapeHTML(it.name) + (it.unit ? ' '+escapeHTML(it.unit) : '') +
+      ' <span class="ck-price">' + fmtMoney(it.unitPrice) + (it.rmbUnitPrice ? ' / '+fmtRmb(it.rmbUnitPrice) : '') + '</span> × ' + it.qty +
+      ' <b class="ck-linetotal">' + fmtMoney(it.lineTotal) + (it.rmbLineTotal ? ' · '+fmtRmb(it.rmbLineTotal) : '') + '</b></div>'
+    ).join('');
+    const subParts = [];
+    if(p.supplier) subParts.push('供应商：'+escapeHTML(p.supplier));
+    if(p.buyer) subParts.push('采购人：'+escapeHTML(p.buyer));
+    if(p.shopName) subParts.push('商家：'+escapeHTML(p.shopName));
+    return `
+      <div class="ck-group">
+        <div class="ck-order-head">
+          <span class="ck-box">☐</span>
+          <b>${escapeHTML(purchaseSummaryTitle(p))}</b>
+          <span class="ck-date">${p.date||''}</span>
+        </div>
+        ${subParts.length ? `<div class="ck-sub">${subParts.join(' · ')}${p.isAdvance ? `<span class="ck-badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span>` : ''}</div>` : (p.isAdvance ? `<div class="ck-sub"><span class="ck-badge ${p.repaid?'paid':'unpaid'}">${p.repaid?'已还款':'待还款'}</span></div>` : '')}
+        <div class="ck-items">${itemLines}</div>
+        <div class="ck-order-total">总计：<b>${fmtMoney(p.totalCost)}</b>${p.rmbTotal ? ' · '+fmtRmb(p.rmbTotal) : ''}</div>
+      </div>
+    `;
+  }).join('');
+
+  const grandTotal = purs.reduce((s,p)=>s+Number(p.totalCost||0),0);
+  const grandTotalRmb = purs.reduce((s,p)=>s+Number(p.rmbTotal||0),0);
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>采购清单</title>
+<style>${checklistStyles()}</style>
 </head>
 <body>
   <div class="print-btn-wrap"><button onclick="window.print()">🖨 打印 / 保存为 PDF</button></div>
-  <h1>订单清单</h1>
-  <div class="meta">共 ${orders.length} 张订单 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
-  <div class="grand-total">总金额：${fmtMoney(orders.reduce((s,o)=>s+Number(o.totalPrice||0),0))}</div>
-  ${namedGroups}
-  ${noDateGroup}
+  <h1>采购清单</h1>
+  <div class="meta">共 ${purs.length} 笔采购 · 生成时间 ${new Date().toISOString().slice(0,16).replace('T',' ')}</div>
+  <div class="grand-total">总金额：${fmtMoney(grandTotal)}${grandTotalRmb ? ' · 人民币参考 '+fmtRmb(grandTotalRmb) : ''}</div>
+  ${groups}
 </body></html>`;
+}
+
+function printPurchaseChecklist(){
+  if(selectedActivityId==='all'){ showToast('请先在上方选择一个具体活动'); return; }
+  const items = filteredPurchases();
+  if(items.length===0){ showToast('这个活动还没有采购记录可以打印'); return; }
+  const html = buildPurchaseChecklistHTML(items);
+  try{
+    const blob = new Blob([html], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '采购清单_' + new Date().toISOString().slice(0,10) + '.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    showToast('采购清单已下载，打开该文件后点里面的打印按钮');
+  }catch(e){
+    console.error(e);
+    showToast('下载失败，请稍后再试');
+  }
 }
 
 function printOrderChecklist(){
